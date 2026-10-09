@@ -213,9 +213,6 @@ export default function SearchPage() {
         </EmptyState>
       ) : (
         <div className="space-y-10">
-          <p className="sr-only" role="status">
-            {results.total} results for {query}
-          </p>
           <div className="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
             {results.top && (
               <section aria-labelledby="top-result">
@@ -284,6 +281,9 @@ export default function SearchPage() {
               ))}
             </Shelf>
           )}
+          <p className="sr-only" role="status">
+            {results.total} results for {query}
+          </p>
           {results.genres.length > 0 && (
             <section>
               <h2 className="mb-3 text-xl font-extrabold">Genres</h2>

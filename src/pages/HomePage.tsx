@@ -115,14 +115,14 @@ function LyricsSpotlight() {
 
 function QuickTile({ to, cover, title, onPlay, playing, icon }: { to: string; cover?: string; title: string; onPlay?: () => void; playing?: boolean; icon?: React.ReactNode }) {
   return (
-    <div className="group relative flex h-16 items-center overflow-hidden rounded-xl bg-fg/[0.06] transition hover:bg-fg/[0.1]">
-      <Link to={to} className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-xl pr-12">
+    <div className="group relative flex h-14 items-center overflow-hidden rounded-xl bg-fg/[0.06] transition hover:bg-fg/[0.1] sm:h-16">
+      <Link to={to} className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-xl pr-3 sm:pr-12">
         {cover ? (
-          <CoverImage src={cover} alt="" rounded="rounded-none" className="h-16 w-16 shrink-0" />
+          <CoverImage src={cover} alt="" rounded="rounded-none" className="h-14 w-14 shrink-0 sm:h-16 sm:w-16" />
         ) : (
-          <span className="grid h-16 w-16 shrink-0 place-items-center bg-gradient-to-br from-ember to-accent text-white">{icon}</span>
+          <span className="grid h-14 w-14 shrink-0 place-items-center bg-gradient-to-br from-ember to-accent text-white sm:h-16 sm:w-16">{icon}</span>
         )}
-        <span className="truncate text-sm font-bold">{title}</span>
+        <span className="line-clamp-2 text-[13px] font-bold leading-tight sm:text-sm">{title}</span>
       </Link>
       {playing ? (
         <span className="absolute right-4">
@@ -182,7 +182,7 @@ export function HomePage() {
           {name ? `, ${name}` : ''}
         </h1>
         <p className="mt-1 text-muted">Fresh picks, synced lyrics and everything you love — all in one wave.</p>
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-6 grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-3">
           {!ready
             ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)
             : [

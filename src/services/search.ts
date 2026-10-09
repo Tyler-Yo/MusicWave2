@@ -21,8 +21,13 @@ export function normalize(s: string): string {
     .trim();
 }
 
+/** One insertion, deletion, substitution or adjacent transposition apart. */
 function withinOneEdit(a: string, b: string): boolean {
   if (Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) {
+    const i = [...a].findIndex((c, k) => c !== b[k]);
+    if (i >= 0 && i + 1 < a.length && a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2)) return true;
+  }
   let i = 0;
   let j = 0;
   let edits = 0;
@@ -117,11 +122,21 @@ export function search(query: string): SearchResults {
   const empty: SearchResults = { query: q, top: null, tracks: [], artists: [], albums: [], playlists: [], genres: [], lyrics: [], total: 0 };
   if (!q) return empty;
 
+  const lyrics = searchLyrics(q);
+  const lyricTrackIds = new Set(lyrics.map((h) => h.track.id));
   const tracks = rank(
     allTracks(),
-    (t) =>
-      Math.max(scoreText(q, t.title) * 1.1, scoreText(q, artistNameOf(t)) * 0.8, scoreText(q, albumTitleOf(t)) * 0.6, scoreText(q, (t.moods ?? []).join(' ')) * 0.4) +
-      Math.log10(t.plays + 10),
+    (t) => {
+      const base = Math.max(
+        scoreText(q, t.title) * 1.1,
+        scoreText(q, artistNameOf(t)) * 0.8,
+        scoreText(q, albumTitleOf(t)) * 0.6,
+        scoreText(q, (t.moods ?? []).join(' ')) * 0.4,
+        lyricTrackIds.has(t.id) ? 28 : 0,
+      );
+      // Popularity only breaks ties between real matches.
+      return base > 0 ? base + Math.log10(t.plays + 10) : 0;
+    },
     20,
   );
   const artists = rank(ARTISTS, (a) => scoreText(q, a.name) * 1.05, 8);
@@ -129,7 +144,6 @@ export function search(query: string): SearchResults {
   const userPlaylists = libraryStore.get().playlists.map(userPlaylistToPlaylist);
   const playlists = rank([...PLAYLISTS, ...userPlaylists], (p) => Math.max(scoreText(q, p.title), scoreText(q, p.description) * 0.5), 8);
   const genres = rank(GENRES, (g) => scoreText(q, g.name), 4);
-  const lyrics = searchLyrics(q);
 
   const candidates = [
     tracks[0] && { kind: 'track' as const, id: tracks[0].item.id, score: tracks[0].score },
