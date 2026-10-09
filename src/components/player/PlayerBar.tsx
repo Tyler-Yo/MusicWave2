@@ -4,7 +4,7 @@ import { ChevronUp, Heart, ListMusic, Mic2, SkipForward } from 'lucide-react';
 import { IconButton } from '@/components/common/Button';
 import { CoverImage } from '@/components/common/CoverImage';
 import { MiniLyrics } from '@/components/lyrics/MiniLyrics';
-import { useCurrentTrack, useIsLiked, useSettings, useUI } from '@/hooks/usePlayer';
+import { useCurrentTrack, useIsLiked, useLyricsState, useSettings, useUI } from '@/hooks/usePlayer';
 import { usePlaybackTime } from '@/hooks/usePlaybackTime';
 import { hasLyrics } from '@/services/lyrics';
 import { artistNameOf, trackCover } from '@/services/catalog';
@@ -34,9 +34,10 @@ export function PlayerBar() {
   const liked = useIsLiked(track?.id ?? '');
   const miniLyrics = useSettings((s) => s.miniLyrics);
   const queueOpen = useUI((s) => s.queueDrawerOpen);
+  const overrides = useLyricsState((s) => s.overrides);
 
   if (!track) return null;
-  const lyrics = hasLyrics(track);
+  const lyrics = hasLyrics(track, overrides);
 
   return (
     <section

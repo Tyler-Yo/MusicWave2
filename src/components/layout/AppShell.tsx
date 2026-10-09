@@ -27,6 +27,9 @@ export function AppShell() {
   const mainRef = useRef<HTMLElement>(null);
   const hasTrack = Boolean(useCurrentTrack());
   const offline = useSettings((s) => s.offlineMode);
+  const nowPlayingOpen = useUI((s) => s.nowPlayingOpen);
+  // While the full-screen player is open, everything behind it is inert (not focusable or announced).
+  const inert = nowPlayingOpen ? ({ inert: '' } as Record<string, string>) : {};
 
   // Scroll to top on navigation (but not when only the search query changes).
   useEffect(() => {
@@ -38,8 +41,10 @@ export function AppShell() {
       <a href="#main" className="sr-only z-[100] rounded-lg bg-primary px-4 py-2 font-semibold text-on-primary focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
         Skip to content
       </a>
-      <Sidebar />
-      <main id="main" ref={mainRef} tabIndex={-1} className="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden outline-none">
+      <div className="contents" {...inert}>
+        <Sidebar />
+      </div>
+      <main {...inert} id="main" ref={mainRef} tabIndex={-1} className="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden outline-none">
         <TopBar />
         {offline && (
           <div className="flex items-center justify-center gap-2 bg-ember/15 px-4 py-2 text-center text-sm font-semibold text-ember">
@@ -52,9 +57,11 @@ export function AppShell() {
           </Suspense>
         </div>
       </main>
-      <QueueDrawer />
-      <PlayerBar />
-      <MobileNav />
+      <div className="contents" {...inert}>
+        <QueueDrawer />
+        <PlayerBar />
+        <MobileNav />
+      </div>
       <NowPlaying />
       <Toaster />
       <AddToPlaylistDialog />

@@ -28,6 +28,8 @@ export class PlaybackClock {
   private anchorMedia = 0;
   private anchorPerf = 0;
   private lastRaw = -1;
+  /** performance.now() when the element last reported a new currentTime. */
+  private lastRawPerf = 0;
   private lastOut = 0;
   private stalled = false;
 
@@ -49,6 +51,7 @@ export class PlaybackClock {
   reset(): void {
     this.anchorMedia = this.media.currentTime;
     this.anchorPerf = performance.now();
+    this.lastRawPerf = this.anchorPerf;
     this.lastRaw = this.anchorMedia;
     this.lastOut = this.anchorMedia;
   }
@@ -79,10 +82,12 @@ export class PlaybackClock {
         this.anchorMedia += err * 0.2;
       }
       this.lastRaw = raw;
+      this.lastRawPerf = perf;
     }
     let t = this.anchorMedia + ((perf - this.anchorPerf) / 1000) * rate;
-    // Never run far ahead of the element (e.g. a stall that fired no event).
-    if (t > raw + 0.3) t = raw + 0.3;
+    // If the element has reported no progress for a while it has probably stalled without
+    // firing an event: stop extrapolating instead of running away from the audio.
+    if (perf - this.lastRawPerf > 400) t = Math.min(t, raw + 0.4 * rate);
     // Monotonic while playing: absorb tiny backward corrections.
     if (t < this.lastOut && this.lastOut - t < 0.1) t = this.lastOut;
     this.lastOut = t;

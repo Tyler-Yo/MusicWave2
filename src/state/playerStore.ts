@@ -273,7 +273,10 @@ async function loadCurrent(): Promise<void> {
     loadedUid = null;
     set({ status: 'error', statusDetail: message });
     const offline = err instanceof OfflineUnavailableError;
-    ui.toast(offline ? `"${track.title}" isn't downloaded. ${message}` : `Couldn't play "${track.title}": ${message}`, 'error');
+    ui.toast(
+      offline ? `“${track.title}” isn’t available offline — download it first or turn off offline mode.` : `Couldn’t play “${track.title}”: ${message}`,
+      'error',
+    );
     const s = get();
     if (s.isPlaying && nextIndex(s.queue.length, s.index, s.repeat) !== null && s.queue.length > 1) {
       setTimeout(() => seq === loadSeq && player.next({ auto: true }), 1500);

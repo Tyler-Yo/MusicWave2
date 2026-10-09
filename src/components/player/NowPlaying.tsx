@@ -69,12 +69,12 @@ function Artwork({ track, playing, vinyl }: { track: Track; playing: boolean; vi
   const reduced = useReducedMotion();
   const cover = trackCover(track);
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[min(26rem,40vh)] md:max-w-[min(30rem,46vh)]">
+    <div className="relative mx-auto aspect-square w-[88%] max-w-[min(26rem,40vh)] md:w-full md:max-w-[min(30rem,46vh)]">
       {vinyl && (
         <div
           className={cn(
             'vinyl absolute inset-[3%] rounded-full shadow-2xl transition-transform duration-700 ease-out-expo',
-            playing ? 'translate-x-[24%]' : 'translate-x-[6%]',
+            playing ? 'translate-x-[14%] md:translate-x-[24%]' : 'translate-x-[4%] md:translate-x-[6%]',
           )}
           aria-hidden="true"
         >
@@ -94,7 +94,7 @@ function Artwork({ track, playing, vinyl }: { track: Track; playing: boolean; vi
         className={cn(
           'relative aspect-square w-full rounded-[1.6rem] object-cover shadow-[0_30px_80px_-20px_rgba(0,0,0,0.75)] transition-transform duration-700 ease-out-expo',
           !vinyl && playing && !reduced && 'scale-[calc(1+var(--energy,0)*0.035)]',
-          vinyl && (playing ? '-translate-x-[6%]' : 'translate-x-0'),
+          vinyl && (playing ? '-translate-x-[2%] md:-translate-x-[6%]' : 'translate-x-0'),
         )}
         style={{ transitionDuration: !vinyl ? '120ms' : undefined } as CSSProperties}
       />
@@ -177,6 +177,7 @@ export function NowPlaying() {
       <button
         onClick={() => ui.togglePanel('lyrics')}
         aria-pressed={showLyrics}
+        aria-label="Lyrics"
         className={cn('inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-semibold transition', showLyrics ? 'bg-white text-black' : 'text-white/80 hover:bg-white/10')}
       >
         <Mic2 className="h-4 w-4" /> <span className="hidden sm:inline">Lyrics</span>
@@ -184,6 +185,7 @@ export function NowPlaying() {
       <button
         onClick={() => ui.togglePanel('queue')}
         aria-pressed={showQueue}
+        aria-label="Up next"
         className={cn('inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-semibold transition', showQueue ? 'bg-white text-black' : 'text-white/80 hover:bg-white/10')}
       >
         <ListMusic className="h-4 w-4" /> <span className="hidden sm:inline">Up next</span>
@@ -192,6 +194,7 @@ export function NowPlaying() {
         <button
           onClick={() => settingsActions.toggleKaraoke()}
           aria-pressed={karaoke}
+          aria-label="Karaoke mode"
           className={cn('inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-semibold transition md:hidden', karaoke ? 'bg-primary text-on-primary' : 'text-white/80 hover:bg-white/10')}
         >
           <Sparkles className="h-4 w-4" />
