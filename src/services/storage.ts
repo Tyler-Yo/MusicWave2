@@ -5,6 +5,12 @@
 import type { Store } from '@/state/createStore';
 
 const PREFIX = 'musicwave:';
+let writesEnabled = true;
+
+/** Stops all persistence writes (used by "Reset everything" before reloading). */
+export function disablePersistence(): void {
+  writesEnabled = false;
+}
 
 export function readJSON<T>(key: string): T | undefined {
   try {
@@ -16,6 +22,7 @@ export function readJSON<T>(key: string): T | undefined {
 }
 
 export function writeJSON(key: string, value: unknown): boolean {
+  if (!writesEnabled) return false;
   try {
     localStorage.setItem(PREFIX + key, JSON.stringify(value));
     return true;

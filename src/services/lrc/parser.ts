@@ -96,7 +96,7 @@ export function parseLrc(source: string, options: ParseOptions = {}): ParsedLyri
   let sawTimestamp = false;
   let sawWordTiming = false;
 
-  const rows = source.replace(/^﻿/, '').split(/\r?\n/);
+  const rows = source.replace(/^\uFEFF/, '').split(/\r?\n/);
 
   rows.forEach((row, rowIndex) => {
     const lineNo = rowIndex + 1;

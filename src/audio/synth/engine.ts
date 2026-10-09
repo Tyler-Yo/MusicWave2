@@ -121,7 +121,7 @@ function accumulate(
   }
 }
 
-function renderOneShots(m: Mix, comp: Composition, arr: Arrangement): void {
+function renderOneShots(m: Mix, arr: Arrangement): void {
   const { sr, style } = m;
   const chip = Boolean(style.chipDrums);
   const cache = new Map<string, Float32Array>();
@@ -701,7 +701,7 @@ export function renderSong(comp: Composition, options: EngineOptions = {}): Rend
   const scratch = new Float32Array(Math.ceil(Math.min(arr.duration, 60) * sr));
 
   progress(0.05);
-  renderOneShots(m, comp, arr);
+  renderOneShots(m, arr);
   progress(0.35);
   if (enabled(m, 'pad')) renderPads(m, arr, scratch);
   progress(0.5);

@@ -1,0 +1,360 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * MusicWave design tokens. Colors are "R G B" triplets consumed by Tailwind
+ * (see tailwind.config.ts) so opacity modifiers like bg-primary/20 work.
+ * Palette: deep ink + "tide" teal + "iris" violet + "ember" coral.
+ */
+@layer base {
+  :root,
+  [data-theme='dark'] {
+    color-scheme: dark;
+    --c-bg: 9 11 20;
+    --c-elevated: 15 18 32;
+    --c-surface: 22 26 45;
+    --c-surface-2: 31 36 60;
+    --c-line: 44 50 78;
+    --c-fg: 240 242 250;
+    --c-muted: 168 174 198;
+    --c-subtle: 128 135 162;
+    --c-primary: 52 224 182;
+    --c-primary-strong: 33 196 157;
+    --c-on-primary: 4 24 19;
+    --c-accent: 139 108 255;
+    --c-ember: 255 122 89;
+    --c-danger: 255 99 120;
+    --lyric-on: 255 255 255;
+    --lyric-off: 255 255 255;
+    --shadow-color: 0 0 0;
+  }
+
+  [data-theme='light'] {
+    color-scheme: light;
+    --c-bg: 245 246 251;
+    --c-elevated: 255 255 255;
+    --c-surface: 236 238 246;
+    --c-surface-2: 225 229 240;
+    --c-line: 214 218 232;
+    --c-fg: 14 17 36;
+    --c-muted: 72 78 102;
+    --c-subtle: 98 104 128;
+    --c-primary: 8 128 104;
+    --c-primary-strong: 6 110 89;
+    --c-on-primary: 255 255 255;
+    --c-accent: 104 72 228;
+    --c-ember: 214 84 50;
+    --c-danger: 200 30 60;
+    --lyric-on: 14 17 36;
+    --lyric-off: 14 17 36;
+    --shadow-color: 40 44 80;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+    font-feature-settings: 'ss01', 'cv11';
+    overscroll-behavior-y: none;
+  }
+
+  ::selection {
+    background: rgb(var(--c-primary) / 0.35);
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-primary));
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  button,
+  [role='button'] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--c-line)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-line));
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgb(var(--c-surface)) 0%,
+      rgb(var(--c-surface-2)) 50%,
+      rgb(var(--c-surface)) 100%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer rounded-lg;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .glass {
+    background: rgb(var(--c-elevated) / 0.78);
+    backdrop-filter: saturate(160%) blur(22px);
+    -webkit-backdrop-filter: saturate(160%) blur(22px);
+  }
+
+  .text-gradient {
+    background: linear-gradient(100deg, rgb(var(--c-primary)), rgb(var(--c-accent)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* --- Range sliders (seek, volume, settings) ------------------------------------------ */
+  .mw-range {
+    --fill: 0%;
+    --track: rgb(var(--c-fg) / 0.16);
+    --active: rgb(var(--c-fg));
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+    height: 18px;
+    width: 100%;
+  }
+  .mw-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--active) var(--fill), var(--track) var(--fill));
+    transition: height 150ms ease;
+  }
+  .mw-range::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--active) var(--fill), var(--track) var(--fill));
+  }
+  .mw-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: var(--active);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+    transform: scale(0);
+    transition: transform 150ms ease;
+  }
+  .mw-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--active);
+    transform: scale(0);
+    transition: transform 150ms ease;
+  }
+  .mw-range:hover::-webkit-slider-thumb,
+  .mw-range:focus-visible::-webkit-slider-thumb,
+  .mw-range:active::-webkit-slider-thumb {
+    transform: scale(1);
+  }
+  .mw-range:hover::-moz-range-thumb,
+  .mw-range:focus-visible::-moz-range-thumb {
+    transform: scale(1);
+  }
+  .mw-range:hover {
+    --active: rgb(var(--c-primary));
+  }
+  .mw-range:focus-visible {
+    outline-offset: 4px;
+  }
+
+  /* --- Lyrics --------------------------------------------------------------------------- */
+  .lyrics-scroller {
+    mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 88%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 88%, transparent 100%);
+  }
+
+  .lyric-line {
+    --lp: 0;
+    position: relative;
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    line-height: 1.22;
+    transform-origin: left center;
+    transition:
+      transform 520ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 420ms ease,
+      color 300ms ease;
+    opacity: 0.42;
+    transform: scale(0.94);
+    cursor: pointer;
+  }
+  .lyric-line:hover {
+    opacity: 0.75;
+  }
+  .lyric-line[data-state='past'] {
+    opacity: 0.3;
+  }
+  .lyric-line[data-state='next'] {
+    opacity: 0.6;
+  }
+  .lyric-line[data-state='active'] {
+    opacity: 1;
+    transform: scale(1);
+  }
+  /* Progress rail beside the active line. */
+  .lyric-line::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 0.15em;
+    bottom: 0.15em;
+    width: 3px;
+    border-radius: 3px;
+    background: linear-gradient(to bottom, rgb(var(--c-primary)) calc(var(--lp) * 100%), rgb(var(--lyric-off) / 0.15) calc(var(--lp) * 100%));
+    opacity: 0;
+    transition: opacity 300ms ease;
+  }
+  .lyric-line[data-state='active']::before {
+    opacity: 1;
+  }
+
+  .lyric-word {
+    --p: 0;
+    --edge: 0.45em;
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--lyric-on)) calc(var(--p) * (100% + var(--edge)) - var(--edge)),
+      rgb(var(--lyric-off) / var(--off-alpha, 0.38)) calc(var(--p) * (100% + var(--edge)))
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    display: inline-block;
+    transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* Keep descenders inside the clip box. */
+    padding-bottom: 0.08em;
+    margin-bottom: -0.08em;
+  }
+  .lyric-line[data-state='past'] .lyric-word {
+    --p: 1;
+  }
+  .lyric-line[data-state='active'] .lyric-word {
+    --off-alpha: 0.5;
+  }
+  .lyric-word[data-sung='1'] {
+    transform: translateY(-0.04em);
+  }
+  .lyric-bg {
+    font-weight: 600;
+    font-style: italic;
+    font-size: 0.78em;
+  }
+  .lyric-match {
+    box-shadow: inset 0 -0.18em 0 rgb(var(--c-ember) / 0.7);
+  }
+
+  /* Karaoke mode: bigger active line, word lift + glow. */
+  .karaoke .lyric-line {
+    transform-origin: center;
+    text-align: center;
+  }
+  .karaoke .lyric-line::before {
+    display: none;
+  }
+  .karaoke .lyric-line[data-state='active'] {
+    transform: scale(1.08);
+  }
+  .karaoke .lyric-line[data-state='active'] .lyric-word[data-sung='1'] {
+    transform: translateY(-0.08em) scale(1.06);
+    filter: drop-shadow(0 0 14px rgb(var(--c-primary) / 0.55));
+  }
+
+  .lyric-interlude {
+    --p: 0;
+  }
+  .lyric-interlude .dot {
+    width: 0.42em;
+    height: 0.42em;
+    border-radius: 999px;
+    background: rgb(var(--lyric-on));
+    transition: transform 200ms ease;
+  }
+  .lyric-interlude .dot:nth-child(1) {
+    opacity: clamp(0.22, calc(var(--p) * 3), 1);
+    transform: scale(clamp(0.7, calc(0.7 + var(--p) * 0.9), 1));
+  }
+  .lyric-interlude .dot:nth-child(2) {
+    opacity: clamp(0.22, calc(var(--p) * 3 - 1), 1);
+    transform: scale(clamp(0.7, calc(0.7 + (var(--p) - 0.333) * 0.9), 1));
+  }
+  .lyric-interlude .dot:nth-child(3) {
+    opacity: clamp(0.22, calc(var(--p) * 3 - 2), 1);
+    transform: scale(clamp(0.7, calc(0.7 + (var(--p) - 0.666) * 0.9), 1));
+  }
+
+  .karaoke-ball {
+    position: absolute;
+    width: 0.32em;
+    height: 0.32em;
+    border-radius: 999px;
+    background: rgb(var(--c-primary));
+    box-shadow: 0 0 12px rgb(var(--c-primary) / 0.9);
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  /* Equalizer bars for "now playing" indicators. */
+  .eq-bar {
+    transform-origin: bottom;
+    @apply animate-eq;
+  }
+}
+
+/* Vinyl record grooves. */
+.vinyl {
+  background:
+    radial-gradient(circle at center, transparent 0 31%, rgb(0 0 0 / 0) 31%),
+    repeating-radial-gradient(circle at center, #0b0b10 0 2px, #16161d 2px 3px),
+    #0b0b10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-motion='reduce'] *,
+[data-motion='reduce'] *::before,
+[data-motion='reduce'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
