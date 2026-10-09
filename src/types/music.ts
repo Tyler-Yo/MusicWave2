@@ -62,6 +62,9 @@ export interface Track {
   lyricsId?: ID;
   credits?: { writtenBy: string[]; producedBy: string[] };
   moods?: string[];
+  /** Display overrides for imported files, which have no catalog artist/album. */
+  artistName?: string;
+  albumTitle?: string;
 }
 
 export interface Album {
