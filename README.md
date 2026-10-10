@@ -1,11 +1,14 @@
 # MusicWave
 
-An original music streaming web app whose flagship feature is **word-by-word synchronized lyrics**, including a karaoke mode and a tap-to-sync Lyrics Studio.
+An original music streaming web app with a **real, searchable music library**, selectable streaming quality (**High Quality, Lossless, Hi-Res Lossless**), **downloads for offline listening**, and **synchronized lyrics fetched automatically** for what you play — plus word-by-word karaoke and a tap-to-sync Lyrics Studio.
 
-Built with React 18, TypeScript, Tailwind CSS and Vite. Every song, lyric, artist, cover and logo was made for this project:
+Built with React 18, TypeScript, Tailwind CSS and Vite. Music comes from open sources that allow free streaming and downloading:
 
-- The 16 demo tracks are composed as data and **synthesized in your browser** (in a Web Worker), then played through a real HTML5 `<audio>` element.
-- The 5 vocal songs ship with original LRC lyrics, and their guide vocal "sings" each syllable at its exact timestamp.
+- **[Audius](https://audius.co)** — millions of full-length tracks uploaded by independent artists (trending, genres, artists, albums, playlists). Lossless originals when the artist allows downloads.
+- **[Internet Archive](https://archive.org)** — the Live Music Archive (many lossless and 24-bit concert recordings), public-domain 78s and Creative Commons netlabel releases.
+- **[LRCLIB](https://lrclib.net)** — a community database of synced (LRC) and plain lyrics, looked up automatically for every online song.
+
+The app also ships **MusicWave Originals**: 16 demo songs composed as data and synthesized in your browser, 5 of them with hand-timed word-by-word lyrics, so lyrics and playback work even with no network at all.
 
 | Now Playing + synced lyrics | Karaoke mode |
 | --- | --- |
@@ -33,13 +36,75 @@ npm run dev          # http://localhost:5173
 | `npm run dev` | Dev server with hot reload |
 | `npm run build` | Type-check and build a production bundle into `dist/` |
 | `npm run preview` | Serve the production build locally |
-| `npm test` | Run the Vitest suites (82 tests) |
+| `npm test` | Run the Vitest suites (116 tests) |
 | `npm run lint` / `npm run typecheck` | ESLint / TypeScript |
 | `npm run generate:lrc` | Regenerate the demo `.lrc` files from the song compositions |
 
 > The first time you play a demo track it is synthesized in the background, which takes about 1–3 s on a typical laptop (a progress ring shows in the play button). While a song plays, the next one is pre-rendered, and the last 6 renders are cached in IndexedDB so replays start instantly.
 
 `dist/` is a static single-page app. Deploy it to any static host with an SPA fallback to `index.html` (Netlify, Vercel, Cloudflare Pages, nginx `try_files`).
+
+---
+
+## Real music: sources, quality, downloads and lyrics
+
+### Where the music comes from
+
+| Source | What you get | Rights |
+| --- | --- | --- |
+| Audius (`api.audius.co`) | Trending (week / month / year / all time, per genre), underground trending, search for songs, artists and playlists, artist pages and albums. Full tracks stream as MP3. | Uploaded and shared by the artists themselves for free streaming. Gated (paid / collectible) tracks are filtered out. |
+| Internet Archive (`archive.org`) | Search across concert recordings, 78 rpm records and netlabel albums; Hi-Res & lossless concert shelves. Every rendition of each track (24-bit FLAC, FLAC, WAV, AIFF, MP3, Ogg) is kept as a separate quality variant. Stream-only (`private`) files are skipped. | Public domain, Creative Commons, or taper-friendly bands that allow free trading. Each recording links to its source page and license. |
+| LRCLIB (`lrclib.net`) | Synced or plain lyrics, matched by title, artist and track length. | Community-contributed. Credited in the lyrics view. |
+
+> **Why not the big-label catalog?** Full-length streaming and downloading of major-label music requires licenses from the labels; there is no legal free API for it. MusicWave deliberately uses only sources whose content may be streamed and downloaded for free, and it does not scrape, rip or proxy any other service.
+
+Everything you touch — tracks, albums, artists — is registered in a local catalog (`state/remoteCatalog.ts`, persisted to localStorage), so online songs can be liked, queued, added to your playlists, downloaded and shown in history exactly like built-in ones, and keep working after a reload or offline.
+
+### Streaming and download quality
+
+Pick separate qualities for **streaming** and **downloads** in *Settings → Audio quality*, or switch the current song from the quality badge in Now Playing (the position is kept).
+
+| Tier | Meaning | Typical size |
+| --- | --- | --- |
+| **High Quality** | Lossy MP3 / Ogg / AAC | ≈ 1–2.5 MB / min |
+| **Lossless** | FLAC / WAV / AIFF / ALAC up to 24-bit / 48 kHz | ≈ 5–15 MB / min |
+| **Hi-Res Lossless** | Lossless above 48 kHz (24-bit / 88.2–192 kHz) | ≈ 15–50 MB / min |
+
+Labels are honest — they describe the actual file, not a marketing promise:
+
+- Lossless candidates are **inspected** before use. MusicWave reads the first 64 KB of the file and parses its header (FLAC `STREAMINFO`, WAV `fmt `, AIFF `COMM` with its 80-bit sample rate) to get the real bit depth and sample rate. For Audius originals it first asks `/tracks/{id}/inspect` for the real content type.
+- **Hi-Res is only shown once the header proves more than 48 kHz.** A "24bit Flac" listing on the Internet Archive stays *Lossless* until verified; a 24-bit / 48 kHz file is *Lossless*.
+- If a source hands over a lossy file instead of a lossless original, the download is re-labelled *High Quality*.
+- The choice falls back automatically: if the requested tier doesn't exist for a song, the best available version plays. If a rendition fails to load (blocked host, unsupported codec), the next best is tried.
+- Formats your browser can't decode are skipped (*Settings* lists what yours supports).
+
+Where to find lossless and Hi-Res: the *Hi-Res & Lossless Live* and *Lossless Concerts* shelves on Home, the **Lossless only** filter in Search → Live & Archive, and Audius tracks whose artists upload WAV / FLAC / AIFF masters and allow downloads.
+
+### Downloads and offline
+
+- **Download** any song (⋯ menu), or a whole album, playlist or recording (Download button on its page). Two downloads run at a time with progress rings, cancel and retry.
+- Each download stores the audio file in the quality chosen in *Settings → Downloads*, its **artwork** and its **lyrics** in IndexedDB.
+- The **Downloads** page (sidebar and mobile tab bar) lists everything saved with its exact quality ("24-bit / 96 kHz FLAC"), filters by tier, total size and browser storage use, plus Play / Shuffle.
+- **Offline is automatic**: when the device loses its connection (or you switch on *Offline mode*), a banner appears, online shelves show a calm notice instead of errors, search looks through your downloads, and downloaded songs play from the device with lyrics and artwork.
+- In production builds a **service worker** (`scripts/serviceWorker.ts`, generated at build time) precaches the app shell, so MusicWave itself opens offline. It never caches audio or API responses.
+
+### Lyrics for online songs
+
+Lyrics are looked up on LRCLIB as soon as an online song starts (cached in IndexedDB, saved with downloads):
+
+- **Synced lyrics** are used only when the LRCLIB recording is within 2.5 s of the song's length; otherwise the timestamps belong to another version (live take, radio edit), so the lyrics are shown **unsynced** with a note.
+- Titles are cleaned before matching ("(Official Audio)", "feat.", "prod.", "– Remastered"), and search results must match both title and artist.
+- States for loading, not found, instrumental, offline and errors (with retry). Everything else — highlighting, click-to-seek, ±0.25 s offset, karaoke, in-lyrics search, mini-player lyrics — works the same as for the originals. If LRCLIB has nothing, the Lyrics Studio can sync them by tapping, and your version overrides the online one.
+
+### Network requirements
+
+The browser talks directly to the sources (all support CORS). If you deploy MusicWave behind a firewall or in a sandbox with an allowlist, allow:
+
+- `api.audius.co` **and the Audius content nodes it redirects streams and downloads to** (these are many different hosts run by node operators), plus artwork hosts;
+- `archive.org` and `*.us.archive.org` (archive.org redirects downloads to numbered servers);
+- `lrclib.net`.
+
+If a host is blocked, its shelves show *Couldn't load this right now* with a Retry button, and everything else keeps working. Optionally paste a free **Audius API key** in *Settings → Music sources* for higher rate limits — only the public key, never a secret or bearer token.
 
 ---
 
@@ -96,15 +161,16 @@ npm run dev          # http://localhost:5173
 - **Graceful errors:** loading failures show a toast and auto-skip; autoplay blocks and offline tracks are explained.
 
 ### Browse, Library and the rest
-- **Home:** time-of-day greeting, quick picks, a Lyrics Lab spotlight, *Made for You* mixes computed from your history and likes, Recently Played, New Releases, Top Charts, genre shelves, featured playlists and artists. Carousels snap and have arrow buttons.
-- **Search:** live results with 250 ms debounce and skeletons while typing. Covers songs, artists, albums, playlists, genres and **lyrics**, with typo tolerance and accent-insensitive matching. Browse tiles and recent searches show when the box is empty.
+- **Home:** time-of-day greeting, quick picks, Recently Played, and live shelves — *Trending Now*, *Hi-Res & Lossless Live*, *Popular Playlists*, *Browse by Genre*, *Underground Trending*, *Lossless Concerts*, *Golden Age 78s*, *Netlabel Releases* — each with skeletons, error/retry and offline states. Below them, the MusicWave Originals: a Lyrics Lab spotlight, *Made for You* mixes, New Releases, Top Charts, genre shelves, featured playlists and artists. Carousels snap and have arrow buttons.
+- **Search:** one box searches everything — Audius songs, artists, albums and playlists, Internet Archive recordings (with a *Lossless only* filter) and the Originals, including **inside lyrics**. Filter chips (All, Songs, Artists, Albums & Playlists, Live & Archive, MusicWave Originals), 300 ms debounce, cancellation of stale requests, and per-section loading and error states. Offline, it searches your downloads. Empty box: genre tiles (each opens a trending page with week / month / year / all-time ranges) and recent searches.
 - **Library**, all persisted to localStorage:
   - **Playlists:** create, rename, delete, add and remove songs.
   - **Liked Songs**, saved albums, followed artists and recently played.
-  - **Downloads**, with an **offline-mode** simulation: rendered audio is stored in IndexedDB, and in offline mode only downloaded and uploaded songs play.
+  - Saved online albums and playlists and followed online artists appear next to the built-in ones.
+  - **Downloads** (its own page): see above.
   - **Uploads:** import your own audio files and attach `.lrc` files.
-- Album, artist, playlist, mix, genre, charts and new-release pages.
-- **Settings:** theme (dark, light or system), name, motion, vinyl artwork, karaoke, lyric size, latency compensation, offline mode, caches and reset.
+- Album, artist, playlist, mix, genre, charts and new-release pages, plus pages for online albums / playlists / recordings (`/collection/:id`), online artists and online genres (`/browse/:genre`).
+- **Settings:** streaming and download quality, music sources (Audius, Internet Archive, automatic lyrics, optional Audius API key), theme (dark, light or system), name, motion, vinyl artwork, karaoke, lyric size, latency compensation, offline mode, caches and reset.
 
 ### Design and accessibility
 - An original identity: deep-ink backgrounds, "tide" teal, "iris" violet and "ember" coral; a custom wave logo; and the Plus Jakarta Sans typeface.
@@ -139,7 +205,15 @@ npm run dev          # http://localhost:5173
 ┌──────────────▼────────────────────────────────────────┴───────────────────────────────┐
 │ services/audioEngine  HTMLAudioElement + PlaybackClock (smooth, monotonic media time) │
 │ services/audioSources  url │ upload (IndexedDB) │ synth (memory LRU → IndexedDB → worker)│
-└──────────────┬───────────────────────────────────────────────────────────────────────┘
+│                        remote: download (IndexedDB) → remoteAudio.selectVariant(tier) │
+└──────────────┬──────────────────────────────────────────┬────────────────────────────┘
+               │                                          │ inspect header, rank variants
+               │                ┌─────────────────────────▼────────────────────────────┐
+               │                │ services/providers  audius · archive · lrclib (fetch) │
+               │                │ services/onlineCatalog → state/remoteCatalog (persisted)│
+               │                │ services/downloads (queue, progress, artwork, lyrics) │
+               │                │ services/remoteLyrics (LRCLIB + IndexedDB cache)      │
+               │                └──────────────────────────────────────────────────────┘
                │ renderCompositionAudio()
 ┌──────────────▼───────────────────────────────────────────────────────────────────────┐
 │ audio/synth  (Web Worker pool, pure JS DSP)                                          │
@@ -158,9 +232,11 @@ musicwave/
 │   ├── favicon.svg                 # original logo mark
 │   └── audio/                      # drop your own MP3s here (served at /audio/…)
 ├── scripts/
-│   └── generate-lrc.ts             # composition → .lrc files (keeps lyrics and audio identical)
+│   ├── generate-lrc.ts             # composition → .lrc files (keeps lyrics and audio identical)
+│   └── serviceWorker.ts            # Vite plugin: emits sw.js precaching the built app shell
 ├── docs/screenshots/               # images used in this README
-├── tests/                          # Vitest: parser, timing, fixtures, engine, draft, search, queue, clock
+├── tests/                          # Vitest: parser, timing, fixtures, engine, draft, search, queue, clock,
+│                                   #   quality (headers, ranking), providers (mappers), online (LRCLIB, inspection)
 └── src/
     ├── main.tsx · App.tsx · index.css        # entry, routes, design tokens + lyric styles
     ├── types/                      # Track, Album, Artist, Playlist, Genre, LyricLine, LyricWord, PlayerState…
@@ -182,9 +258,17 @@ musicwave/
     │   ├── audioEngine.ts          # <audio> wrapper + PlaybackClock
     │   ├── playbackTicker.ts       # one shared rAF loop that fans out the clock
     │   ├── audioSources.ts         # resolve/prefetch/download audio, caches
-    │   ├── offlineStore.ts · storage.ts   # IndexedDB · versioned localStorage
+    │   ├── providers/              # audius.ts · archive.ts · lrclib.ts · http.ts (API clients + mappers)
+    │   ├── quality.ts              # tiers, header parsing (FLAC/WAV/AIFF), variant ranking, labels
+    │   ├── remoteAudio.ts          # inspect lossless files, pick a variant, current playback quality
+    │   ├── onlineCatalog.ts        # queries that register results in the remote catalog
+    │   ├── downloads.ts            # download queue with progress, artwork + lyrics, offline artwork
+    │   ├── remoteLyrics.ts         # automatic LRCLIB lyrics with IndexedDB cache
+    │   ├── online.ts               # startup wiring (API key, registry references, artwork)
+    │   ├── offlineStore.ts · storage.ts   # IndexedDB (audio, uploads, lyrics, artwork) · versioned localStorage
     │   ├── catalog.ts · search.ts · recommendations.ts · lyrics.ts · uploads.ts
-    ├── state/                      # createStore + player / queue / library / settings / lyrics / ui stores
+    ├── state/                      # createStore + player / queue / library / settings / lyrics / ui stores,
+    │                               #   remoteCatalog (online tracks/albums/artists), networkStore (online/offline)
     ├── hooks/                      # usePlaybackTime, useLyricsSync, useLyrics, useKeyboardShortcuts, useMediaSession…
     ├── providers/AppProviders.tsx  # theme + player binding + shortcuts + media session
     ├── components/
@@ -192,8 +276,8 @@ musicwave/
     │   ├── player/                 # PlayerBar, NowPlaying, Controls, SeekBar, VolumeControl, SpeedMenu, Queue*
     │   ├── lyrics/                 # LyricsView, LyricLine, LyricsToolbar, MiniLyrics
     │   ├── cards/ · collection/ · dialogs/ · common/ · art/
-    └── pages/                      # Home, Search, Genre, Album, Artist, Playlist, Mix, Charts,
-                                    # NewReleases, Library, LyricsStudio, Settings, NotFound
+    └── pages/                      # Home, Search, Genre, BrowseGenre, Album, Collection, Artist, Playlist, Mix,
+                                    # Charts, NewReleases, Library, Downloads, LyricsStudio, Settings, NotFound
 ```
 
 ---
@@ -327,17 +411,28 @@ The `# …` comments below are explanations, not LRC syntax.
 npm test
 ```
 
-82 tests cover:
+116 tests cover:
 - LRC parsing for every supported variant, plus serialization round-trips.
 - Timeline lead-in and interludes, binary search, and word interpolation.
 - The five lyric fixtures: committed `.lrc` files match the generator, and word times match the sung syllables.
 - The stress scenarios: slow ballad, fast rap, repeated choruses, instrumental breaks, standard LRC.
 - Real audio rendering, including a syllable-onset check, plus the WAV format.
 - The Studio tap model, search ranking and typo tolerance, queue operations, and the playback clock (coarse updates, playback rate, seeks, stalls).
+- Audio quality: FLAC / WAV / AIFF header parsing (incl. ID3-prefixed FLAC and 80-bit AIFF sample rates), tier classification, variant ranking for each requested tier, and "never Hi-Res without proof".
+- Provider mappers against fixtures in the documented API shapes (Audius tracks, users, playlists, gated tracks, lossless originals; Internet Archive items, derivatives, private files, search docs).
+- LRCLIB matching (title cleaning, length tolerance, candidate choice, `/get` → `/search` fallback, network errors) and end-to-end variant inspection with a mocked network (24/96 → Hi-Res, 24/48 → Lossless, unreadable → Lossless, fallbacks).
+
+The online features were also exercised in Chromium against mocked endpoints that return real generated audio (24-bit / 96 kHz FLAC and WAV, 16-bit FLAC, 320 kbps MP3): live shelves, federated search, Hi-Res playback with verified badges, quality switching mid-song, synced and unsynced LRCLIB lyrics, whole-album downloads, automatic offline mode, and the production service worker opening the app offline.
 
 ---
 
 ## Notes and limits
+
+- Online catalogs are live services: availability, rate limits and what each artist allows can change. Audius may throttle requests without an API key.
+- Lossless downloads are large (a 24-bit / 96 kHz FLAC album can exceed 1 GB). Browsers cap storage per site; the Downloads page shows how much is used.
+- Hi-Res files play at full resolution only if your browser, OS mixer and output device run at that rate; otherwise they are resampled for playback (the file itself is still Hi-Res).
+- Downloading needs the source to allow cross-origin requests (Audius and archive.org do). Streaming doesn't, so playback works even from hosts that don't send CORS headers.
+- LRCLIB coverage is best for released songs; many independent uploads have no lyrics yet.
 
 - The rendered WAV for a demo song is 15–26 MB. At most 4 are kept in memory and 6 in the IndexedDB cache; downloads are kept until you remove them.
 - Background tabs throttle `requestAnimationFrame`, so lyrics pause their animation, but audio keeps playing and they resync instantly when you return.
@@ -346,7 +441,8 @@ npm test
 
 ## Originality and licenses
 
-- All music, compositions, lyrics, artist names, album names, artwork and the logo are original to this project.
+- Music from Audius and the Internet Archive belongs to its artists and uploaders; MusicWave links every track, recording and artist back to its source page and shows the license the source reports. Lyrics from LRCLIB are credited in the lyrics view.
+- The MusicWave Originals (compositions, lyrics, artist and album names), the generated artwork and the logo are original to this project.
 - Icons: [Lucide](https://lucide.dev) (ISC).
 - Font: Plus Jakarta Sans via Fontsource (SIL OFL 1.1).
 - Drag and drop: dnd-kit (MIT).
