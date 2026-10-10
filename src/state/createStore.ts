@@ -48,17 +48,18 @@ export function useStore<T extends object, S>(
   selector: (state: T) => S,
   isEqual: (a: S, b: S) => boolean = Object.is,
 ): S {
-  const cache = useRef<{ state: T; value: S } | null>(null);
+  const cache = useRef<{ state: T; selector: (state: T) => S; value: S } | null>(null);
   const getSnapshot = useCallback(() => {
     const state = store.get();
     const cached = cache.current;
-    if (cached && cached.state === state) return cached.value;
+    // A new selector (e.g. a different id captured in it) must be re-evaluated even if the state is unchanged.
+    if (cached && cached.state === state && cached.selector === selector) return cached.value;
     const value = selector(state);
     if (cached && isEqual(cached.value, value)) {
-      cache.current = { state, value: cached.value };
+      cache.current = { state, selector, value: cached.value };
       return cached.value;
     }
-    cache.current = { state, value };
+    cache.current = { state, selector, value };
     return value;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store, selector]);

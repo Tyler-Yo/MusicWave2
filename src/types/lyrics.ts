@@ -82,4 +82,4 @@ export interface LyricsTimeline {
 }
 
 /** Where the lyrics shown for a track came from. */
-export type LyricsSourceKind = 'original' | 'custom';
+export type LyricsSourceKind = 'original' | 'custom' | 'lrclib';

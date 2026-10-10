@@ -18,6 +18,11 @@ if (import.meta.env.DEV) {
   );
 }
 
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  // Precached app shell: MusicWave opens offline, and downloaded music plays from IndexedDB.
+  window.addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => undefined));
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

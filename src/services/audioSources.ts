@@ -1,9 +1,10 @@
 /**
  * Resolves a Track to a playable URL.
  *
- *   url     → used as-is (your own MP3s in /public/audio, or any CORS-enabled URL)
+ *   url     → used as-is (your own MP3s in /public/audio, or any URL)
  *   upload  → blob from IndexedDB → object URL
  *   synth   → memory cache → IndexedDB cache/download → render in a Web Worker
+ *   remote  → downloaded copy in IndexedDB → best online rendition for the chosen quality
  *
  * Rendered audio is kept in a small in-memory LRU of object URLs (the current
  * track is pinned so it is never revoked while playing) and, optionally, in
@@ -14,9 +15,11 @@ import { analyzePcm, type AudioAnalysis } from '@/audio/synth/engine';
 import { COMPOSITIONS } from '@/data/compositions';
 import { createStore } from '@/state/createStore';
 import { libraryActions, libraryStore } from '@/state/libraryStore';
+import { isOffline } from '@/state/networkStore';
 import { settingsStore } from '@/state/settingsStore';
-import type { Track } from '@/types/music';
+import type { AudioVariant, QualityTier, Track } from '@/types/music';
 import { offlineStore } from './offlineStore';
+import { playbackQualityStore, selectVariant } from './remoteAudio';
 
 /** Bump when the synth engine output changes so stale cached renders are ignored. */
 export const ENGINE_VERSION = 3;
@@ -33,11 +36,14 @@ export class OfflineUnavailableError extends Error {
 export interface ResolvedAudio {
   url: string;
   origin: 'memory' | 'disk' | 'render' | 'network' | 'upload';
+  /** For online tracks: the rendition being played. */
+  variant?: AudioVariant;
 }
 
 interface MemoryEntry {
   url: string;
   blob?: Blob;
+  variant?: AudioVariant;
   lastUsed: number;
 }
 
@@ -64,8 +70,8 @@ function setProgress(trackId: string, p: number | null) {
   });
 }
 
-function remember(trackId: string, url: string, blob?: Blob) {
-  memory.set(trackId, { url, blob, lastUsed: Date.now() });
+function remember(trackId: string, url: string, blob?: Blob, variant?: AudioVariant) {
+  memory.set(trackId, { url, blob, variant, lastUsed: Date.now() });
   const entries = [...memory.entries()].sort((a, b) => b[1].lastUsed - a[1].lastUsed);
   for (const [id, entry] of entries.slice(MEMORY_LIMIT)) {
     if (id === pinnedId) continue;
@@ -75,6 +81,16 @@ function remember(trackId: string, url: string, blob?: Blob) {
 }
 
 const diskKey = (compositionId: string) => `synth:${compositionId}:v${ENGINE_VERSION}`;
+/** IndexedDB key of a downloaded online track. */
+export const downloadKey = (trackId: string) => `dl:${trackId}`;
+
+/** Drops a track's in-memory audio (after its download was removed). */
+export function forgetTrackAudio(trackId: string): void {
+  const entry = memory.get(trackId);
+  if (!entry || trackId === pinnedId) return;
+  if (entry.url.startsWith('blob:')) URL.revokeObjectURL(entry.url);
+  memory.delete(trackId);
+}
 
 /** Marks the track currently loaded in the player so its URL is never revoked. */
 export function pinTrack(trackId: string | null): void {
@@ -83,7 +99,7 @@ export function pinTrack(trackId: string | null): void {
 
 export function isPlayableOffline(track: Track): boolean {
   if (track.source.kind === 'upload') return true;
-  if (track.source.kind === 'synth') return Boolean(libraryStore.get().downloads[track.id]);
+  if (track.source.kind === 'synth' || track.source.kind === 'remote') return Boolean(libraryStore.get().downloads[track.id]);
   return false;
 }
 
@@ -131,17 +147,30 @@ async function decodeAnalysis(trackId: string, blob: Blob) {
   }
 }
 
+/** Quality to stream a track in: a per-track choice from Now Playing, else Settings. */
+export function requestedQuality(trackId: string): QualityTier {
+  const o = playbackQualityStore.get().override;
+  return o && o.trackId === trackId ? o.tier : settingsStore.get().streamingQuality;
+}
+
 export async function resolveTrackAudio(
   track: Track,
-  options: { priority?: 'foreground' | 'background' } = {},
+  options: {
+    priority?: 'foreground' | 'background';
+    /** Online renditions that already failed to load. */
+    exclude?: Set<string>;
+    /** Stream this quality even if a downloaded copy exists (Now Playing quality menu). */
+    preferStream?: boolean;
+  } = {},
 ): Promise<ResolvedAudio> {
   const priority = options.priority ?? 'foreground';
+  const offline = isOffline();
+  const streamFirst = Boolean(options.preferStream && !offline);
   const cached = memory.get(track.id);
-  if (cached) {
+  if (cached && !streamFirst && !options.exclude?.size) {
     cached.lastUsed = Date.now();
-    return { url: cached.url, origin: 'memory' };
+    return { url: cached.url, origin: 'memory', variant: cached.variant };
   }
-  const offline = settingsStore.get().offlineMode;
 
   switch (track.source.kind) {
     case 'url': {
@@ -172,19 +201,37 @@ export async function resolveTrackAudio(
       remember(track.id, url, blob);
       return { url, origin: 'render' };
     }
+    case 'remote': {
+      if (!streamFirst) {
+        const saved = await offlineStore.getAudio(downloadKey(track.id));
+        if (saved) {
+          const url = URL.createObjectURL(saved.blob);
+          remember(track.id, url, saved.blob, saved.variant);
+          void offlineStore.touchAudio(saved.key);
+          return { url, origin: 'disk', variant: saved.variant };
+        }
+      }
+      if (offline) throw new OfflineUnavailableError();
+      const variant = await selectVariant(track, requestedQuality(track.id), { exclude: options.exclude });
+      if (!variant) {
+        throw new Error(options.exclude?.size ? 'None of the available versions of this track could be played.' : 'Your browser can’t play any version of this track.');
+      }
+      return { url: variant.url, origin: 'network', variant };
+    }
   }
 }
 
 /** Renders/loads a track in the background so it starts instantly later. */
 export function prefetchTrack(track: Track | undefined): void {
-  if (!track || memory.has(track.id) || settingsStore.get().offlineMode) return;
+  if (!track || memory.has(track.id) || isOffline()) return;
+  // For online tracks this warms the quality inspection; the stream itself starts on play.
   void resolveTrackAudio(track, { priority: 'background' }).catch(() => undefined);
 }
 
 /** "Download" a demo track: render if needed and store it permanently in IndexedDB. */
 export async function downloadTrack(track: Track): Promise<void> {
   if (track.source.kind === 'upload') return;
-  if (track.source.kind !== 'synth') throw new Error('Only MusicWave demo tracks can be downloaded in this build.');
+  if (track.source.kind !== 'synth') throw new Error('Use the downloads service for online tracks.');
   const key = diskKey(track.source.compositionId);
   let rec = await offlineStore.getAudio(key);
   if (!rec) {
@@ -211,6 +258,11 @@ export async function removeDownloadedTrack(track: Track): Promise<void> {
     const rec = await offlineStore.getAudio(diskKey(track.source.compositionId));
     if (rec) await offlineStore.putAudio({ ...rec, pinned: false, lastUsed: 0 });
     await offlineStore.evictUnpinned(DISK_CACHE_LIMIT);
+  }
+  if (track.source.kind === 'remote') {
+    await offlineStore.deleteAudio(downloadKey(track.id));
+    await offlineStore.deleteArtwork(track.id);
+    forgetTrackAudio(track.id);
   }
   libraryActions.removeDownload(track.id);
 }

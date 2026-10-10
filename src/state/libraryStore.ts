@@ -1,5 +1,5 @@
 /** The listener's library: likes, saves, playlists, history, downloads and uploads. */
-import type { PlayContext, UploadedTrackMeta } from '@/types/music';
+import type { PlayContext, QualityTier, UploadedTrackMeta } from '@/types/music';
 import { persistStore } from '@/services/storage';
 import { createStore } from './createStore';
 
@@ -27,9 +27,18 @@ export interface LibraryState {
   history: HistoryEntry[];
   playCounts: Record<string, number>;
   /** Tracks explicitly downloaded for offline listening. */
-  downloads: Record<string, { savedAt: number; size: number }>;
+  downloads: Record<string, DownloadInfo>;
   uploads: UploadedTrackMeta[];
   recentSearches: string[];
+}
+
+export interface DownloadInfo {
+  savedAt: number;
+  size: number;
+  /** Quality of the saved file (online tracks). */
+  tier?: QualityTier;
+  /** e.g. "24-bit / 96 kHz FLAC" or "MP3". */
+  detail?: string;
 }
 
 const HISTORY_LIMIT = 200;
@@ -118,8 +127,8 @@ export const libraryActions = {
   },
   clearHistory: () => libraryStore.set({ history: [] }),
 
-  setDownloaded(trackId: string, size: number) {
-    libraryStore.set((s) => ({ downloads: { ...s.downloads, [trackId]: { savedAt: Date.now(), size } } }));
+  setDownloaded(trackId: string, size: number, extra: Pick<DownloadInfo, 'tier' | 'detail'> = {}) {
+    libraryStore.set((s) => ({ downloads: { ...s.downloads, [trackId]: { savedAt: Date.now(), size, ...extra } } }));
   },
   removeDownload(trackId: string) {
     libraryStore.set((s) => {

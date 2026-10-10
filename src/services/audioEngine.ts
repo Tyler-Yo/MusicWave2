@@ -105,7 +105,8 @@ export class AudioEngine {
   constructor() {
     this.audio = new Audio();
     this.audio.preload = 'auto';
-    this.audio.crossOrigin = 'anonymous';
+    // No crossOrigin: online catalogs serve audio from many hosts, not all of which send CORS
+    // headers, and playback through a plain <audio> element doesn't need them.
     // Keep pitch natural when the speed changes.
     this.audio.preservesPitch = true;
     this.clock = new PlaybackClock(this.audio);

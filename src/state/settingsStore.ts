@@ -1,5 +1,6 @@
 /** User preferences, persisted to localStorage. */
 import { persistStore } from '@/services/storage';
+import type { QualityTier } from '@/types/music';
 import { createStore } from './createStore';
 
 export type ThemePreference = 'dark' | 'light' | 'system';
@@ -27,6 +28,16 @@ export interface SettingsState {
   vinylArt: boolean;
   /** Keep recently rendered demo tracks in IndexedDB for instant replays. */
   cacheRenders: boolean;
+  /** Preferred quality when streaming online tracks. */
+  streamingQuality: QualityTier;
+  /** Preferred quality for downloads. */
+  downloadQuality: QualityTier;
+  /** Online catalogs that are searched and shown on Home. */
+  sources: { audius: boolean; archive: boolean };
+  /** Look up lyrics for online tracks automatically (LRCLIB). */
+  autoLyrics: boolean;
+  /** Optional Audius API key (raises rate limits). Never put a secret/bearer token here. */
+  audiusApiKey: string;
 }
 
 export const OFFSET_STEP = 0.25;
@@ -44,6 +55,11 @@ export const settingsStore = createStore<SettingsState>({
   miniLyrics: true,
   vinylArt: true,
   cacheRenders: true,
+  streamingQuality: 'high',
+  downloadQuality: 'lossless',
+  sources: { audius: true, archive: true },
+  autoLyrics: true,
+  audiusApiKey: '',
 });
 
 persistStore(settingsStore, { key: 'settings', version: 1, pick: (s) => s });

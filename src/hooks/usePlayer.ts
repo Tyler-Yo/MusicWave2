@@ -6,6 +6,7 @@ import { playerStore } from '@/state/playerStore';
 import { settingsStore, type SettingsState } from '@/state/settingsStore';
 import { uiStore, type UIState } from '@/state/uiStore';
 import { lyricsStore, type LyricsState } from '@/state/lyricsStore';
+import { remoteCatalogStore } from '@/state/remoteCatalog';
 import type { LibraryState } from '@/state/libraryStore';
 import type { PlayerState } from '@/types/player';
 import type { Track } from '@/types/music';
@@ -32,8 +33,9 @@ const selectCurrentId = (s: PlayerState) => (s.index >= 0 ? s.queue[s.index]?.tr
 /** The current track (re-renders only when the track changes). */
 export function useCurrentTrack(): Track | undefined {
   const id = usePlayer(selectCurrentId);
-  // Uploaded tracks resolve through the library, so subscribe to uploads too.
+  // Uploaded tracks resolve through the library and online tracks through the remote catalog.
   useLibrary((s) => s.uploads, shallowEqual);
+  useStore(remoteCatalogStore, (s) => s.version);
   return id ? getTrack(id) : undefined;
 }
 

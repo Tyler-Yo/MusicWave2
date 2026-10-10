@@ -5,14 +5,16 @@
  * reconciles the HTMLAudioElement with it and feeds element events back.
  */
 import { getAudioEngine } from '@/services/audioEngine';
-import { OfflineUnavailableError, pinTrack, prefetchTrack, resolveTrackAudio } from '@/services/audioSources';
+import { OfflineUnavailableError, pinTrack, prefetchTrack, requestedQuality, resolveTrackAudio } from '@/services/audioSources';
 import { artistNameOf, getTrack } from '@/services/catalog';
 import { invalidatePlaybackTime } from '@/services/playbackTicker';
+import { playbackQualityStore } from '@/services/remoteAudio';
 import { persistStore, readJSON, writeJSON } from '@/services/storage';
-import type { PlayContext } from '@/types/music';
+import type { PlayContext, QualityTier } from '@/types/music';
 import type { PlayerState, RepeatMode } from '@/types/player';
 import { createStore } from './createStore';
 import { libraryActions } from './libraryStore';
+import { updateRemoteTrack } from './remoteCatalog';
 import {
   appendToQueue,
   insertNext,
@@ -216,13 +218,22 @@ export const player = {
     const i = get().queue.findIndex((q) => q.uid === uid);
     if (i >= 0) set({ index: i, isPlaying: true });
   },
+
+  /** Switches the current online track to another quality, keeping the position. */
+  setQuality(tier: QualityTier) {
+    const item = currentItem();
+    if (!item) return;
+    playbackQualityStore.set({ override: { trackId: item.trackId, tier } });
+    if (loadedUid === item.uid) pendingStart = { uid: item.uid, time: getAudioEngine().currentTime };
+    void loadCurrent({ preferStream: true });
+  },
 };
 
 // ---------------------------------------------------------------------------------------------
 // Engine binding
 // ---------------------------------------------------------------------------------------------
 
-async function loadCurrent(): Promise<void> {
+async function loadCurrent(opts: { preferStream?: boolean } = {}): Promise<void> {
   const engine = getAudioEngine();
   const item = currentItem();
   const seq = ++loadSeq;
@@ -245,16 +256,39 @@ async function loadCurrent(): Promise<void> {
   set({ status: 'loading', statusDetail: track.source.kind === 'synth' ? 'Preparing audio…' : 'Loading…' });
   pinTrack(track.id);
   engine.pause();
+  const override = playbackQualityStore.get().override;
+  if (override && override.trackId !== track.id) playbackQualityStore.set({ override: null });
   try {
-    const { url } = await resolveTrackAudio(track);
-    if (seq !== loadSeq) return;
     const startAt = pendingStart?.uid === item.uid ? pendingStart.time : 0;
+    // Online tracks: if a rendition fails to load (blocked host, unsupported codec…), try the next best one.
+    const failed = new Set<string>();
+    let resolved = await resolveTrackAudio(track, { preferStream: opts.preferStream });
+    for (;;) {
+      if (seq !== loadSeq) return;
+      try {
+        await engine.load(resolved.url, startAt);
+        break;
+      } catch (err) {
+        if (seq !== loadSeq || !resolved.variant || resolved.origin !== 'network' || (err instanceof Error && err.message === 'superseded')) throw err;
+        failed.add(resolved.variant.url);
+        resolved = await resolveTrackAudio(track, { exclude: failed, preferStream: true });
+      }
+    }
     pendingStart = null;
-    await engine.load(url, startAt);
     if (seq !== loadSeq) return;
-    if (track.source.kind !== 'synth' && Number.isFinite(engine.duration) && track.duration === 0) {
+    playbackQualityStore.set({
+      trackId: track.id,
+      variant: resolved.variant ?? null,
+      requested: requestedQuality(track.id),
+      origin: track.source.kind === 'remote' ? (resolved.origin === 'network' ? 'stream' : 'download') : null,
+    });
+    if (track.source.kind === 'upload' && Number.isFinite(engine.duration) && track.duration === 0) {
       // Uploaded files learn their duration on load.
       libraryActions.updateUpload(track.id, { duration: engine.duration });
+    } else if (track.source.kind === 'remote' && Number.isFinite(engine.duration) && Math.abs(track.duration - engine.duration) > 1.5) {
+      // Online catalogs sometimes report no (or a rounded) length; the file knows best.
+      const duration = engine.duration;
+      updateRemoteTrack(track.id, (t) => ({ ...t, duration }));
     }
     set({ status: 'ready', statusDetail: undefined });
     invalidatePlaybackTime();
@@ -274,7 +308,7 @@ async function loadCurrent(): Promise<void> {
     set({ status: 'error', statusDetail: message });
     const offline = err instanceof OfflineUnavailableError;
     ui.toast(
-      offline ? `“${track.title}” isn’t available offline — download it first or turn off offline mode.` : `Couldn’t play “${track.title}”: ${message}`,
+      offline ? `“${track.title}” isn’t downloaded, so it can’t play offline.` : `Couldn’t play “${track.title}”: ${message}`,
       'error',
     );
     const s = get();
