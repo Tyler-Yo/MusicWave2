@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useRef } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from '@/components/common/Toaster';
 import { AddToPlaylistDialog } from '@/components/dialogs/AddToPlaylistDialog';
 import { ShortcutsDialog } from '@/components/dialogs/ShortcutsDialog';
@@ -7,9 +7,11 @@ import { NowPlaying } from '@/components/player/NowPlaying';
 import { PlayerBar } from '@/components/player/PlayerBar';
 import { QueueDrawer } from '@/components/player/QueueDrawer';
 import { ShelfSkeleton } from '@/components/common/Skeleton';
-import { useCurrentTrack, useSettings, useUI } from '@/hooks/usePlayer';
-import { CloudOff } from 'lucide-react';
+import { useCurrentTrack, useUI } from '@/hooks/usePlayer';
+import { useOffline } from '@/state/networkStore';
+import { CloudOff, WifiOff } from 'lucide-react';
 import { MobileNav } from './MobileNav';
+import { RouteErrorBoundary } from './RouteErrorBoundary';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 
@@ -26,7 +28,7 @@ export function AppShell() {
   const location = useLocation();
   const mainRef = useRef<HTMLElement>(null);
   const hasTrack = Boolean(useCurrentTrack());
-  const offline = useSettings((s) => s.offlineMode);
+  const { offline, connected } = useOffline();
   const nowPlayingOpen = useUI((s) => s.nowPlayingOpen);
   // While the full-screen player is open, everything behind it is inert (not focusable or announced).
   const inert = nowPlayingOpen ? ({ inert: '' } as Record<string, string>) : {};
@@ -47,14 +49,20 @@ export function AppShell() {
       <main {...inert} id="main" ref={mainRef} tabIndex={-1} className="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden outline-none">
         <TopBar />
         {offline && (
-          <div className="flex items-center justify-center gap-2 bg-ember/15 px-4 py-2 text-center text-sm font-semibold text-ember">
-            <CloudOff className="h-4 w-4" /> Offline mode — only downloaded and uploaded tracks can play.
+          <div role="status" className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 bg-ember/15 px-4 py-2 text-center text-sm font-semibold text-ember">
+            {connected ? <CloudOff className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+            {connected ? 'Offline mode is on' : 'You’re offline'} — downloaded music still plays.
+            <Link to="/downloads" className="underline underline-offset-2">
+              Go to Downloads
+            </Link>
           </div>
         )}
         <div key={location.pathname} className={`animate-fade-up px-4 pb-10 pt-6 sm:px-6 lg:px-8 ${hasTrack ? 'pb-44 md:pb-32' : 'pb-28 md:pb-12'}`}>
-          <Suspense fallback={<ShelfSkeleton />}>
-            <Outlet />
-          </Suspense>
+          <RouteErrorBoundary resetKey={location.pathname}>
+            <Suspense fallback={<ShelfSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </RouteErrorBoundary>
         </div>
       </main>
       <div className="contents" {...inert}>

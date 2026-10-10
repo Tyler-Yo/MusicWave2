@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Compass, Heart, Home, Library, ListMusic, PenLine, Plus, Settings } from 'lucide-react';
+import { ArrowDownCircle, Compass, Heart, Home, Library, ListMusic, PenLine, Plus, Settings } from 'lucide-react';
 import { Logo } from '@/components/art/Logo';
 import { useLibrary } from '@/hooks/usePlayer';
 import { libraryActions } from '@/state/libraryStore';
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/', label: 'Home', icon: Home, end: true },
   { to: '/search', label: 'Browse', icon: Compass },
   { to: '/library', label: 'Library', icon: Library },
+  { to: '/downloads', label: 'Downloads', icon: ArrowDownCircle },
   { to: '/studio', label: 'Lyrics Studio', icon: PenLine },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];

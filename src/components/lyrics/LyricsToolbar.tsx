@@ -57,6 +57,7 @@ export function LyricsToolbar({
       >
         {kind === 'enhanced' ? 'Word-synced' : 'Line-synced'}
         {source === 'custom' && <span className="rounded-full bg-primary/25 px-1.5 text-[10px] text-primary">Custom</span>}
+        {source === 'lrclib' && <span className={cn('rounded-full px-1.5 text-[10px]', tone === 'immersive' ? 'bg-white/15' : 'bg-fg/10')}>LRCLIB</span>}
       </span>
 
       <div className={cn('flex items-center rounded-full', tone === 'immersive' ? 'bg-white/10' : 'bg-fg/[0.07]')} role="group" aria-label="Lyrics timing offset">

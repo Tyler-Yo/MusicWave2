@@ -3,7 +3,7 @@
  * music's energy, spinning vinyl artwork, waveform seek bar, transport, and a
  * lyrics / queue panel (side-by-side on desktop, swappable views on mobile).
  */
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, Heart, ListMusic, Mic2, MoreHorizontal, Sparkles } from 'lucide-react';
 import { Menu } from '@/components/common/Menu';
@@ -14,7 +14,7 @@ import { usePlaybackFrame } from '@/hooks/usePlaybackTime';
 import { useCurrentTrack, useIsLiked, usePlayer, useSettings, useUI } from '@/hooks/usePlayer';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { analysisStore } from '@/services/audioSources';
-import { artistNameOf, paletteOf, trackCover, albumTitleOf } from '@/services/catalog';
+import { artistHref, artistNameOf, paletteOf, trackCover, trackFallbackCover, albumTitleOf } from '@/services/catalog';
 import { libraryActions } from '@/state/libraryStore';
 import { settingsActions } from '@/state/settingsStore';
 import { ui } from '@/state/uiStore';
@@ -22,6 +22,7 @@ import type { Track } from '@/types/music';
 import { cn } from '@/utils/cn';
 import { rgba } from '@/utils/color';
 import { TransportControls } from './Controls';
+import { QualityMenu } from './QualityMenu';
 import { QueuePanel } from './QueuePanel';
 import { SeekBar } from './SeekBar';
 import { SpeedMenu } from './SpeedMenu';
@@ -65,11 +66,19 @@ function Ambient({ track }: { track: Track | undefined }) {
   );
 }
 
+/** Cover URL that falls back to generated art if the online image can't load. */
+function useCover(track: Track): [string, () => void] {
+  const src = trackCover(track);
+  const [failed, setFailed] = useState<string | null>(null);
+  return [failed === src ? trackFallbackCover(track) : src, () => setFailed(src)];
+}
+
 function Artwork({ track, playing, vinyl }: { track: Track; playing: boolean; vinyl: boolean }) {
   const reduced = useReducedMotion();
-  const cover = trackCover(track);
+  const [cover, onCoverError] = useCover(track);
   return (
-    <div className="relative mx-auto aspect-square w-[88%] max-w-[min(26rem,40vh)] md:w-full md:max-w-[min(30rem,46vh)]">
+    // Square that fills the height left over by the controls (capped), so it never overlaps the title on short screens.
+    <div className="relative mx-auto aspect-square h-full max-h-[min(26rem,40vh)] max-w-[88%] md:max-h-[min(30rem,46vh)] md:max-w-full">
       {vinyl && (
         <div
           className={cn(
@@ -82,7 +91,7 @@ function Artwork({ track, playing, vinyl }: { track: Track; playing: boolean; vi
             className="absolute inset-0 rounded-full animate-spin-slow"
             style={{ animationPlayState: playing && !reduced ? 'running' : 'paused' }}
           >
-            <img src={cover} alt="" className="absolute left-1/2 top-1/2 h-[34%] w-[34%] -translate-x-1/2 -translate-y-1/2 rounded-full object-cover" />
+            <img src={cover} alt="" onError={onCoverError} referrerPolicy="no-referrer" className="absolute left-1/2 top-1/2 h-[34%] w-[34%] -translate-x-1/2 -translate-y-1/2 rounded-full object-cover" />
             <span className="absolute left-1/2 top-1/2 h-[3%] w-[3%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black" />
             <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_30deg,transparent_0deg,rgba(255,255,255,0.09)_40deg,transparent_80deg,transparent_180deg,rgba(255,255,255,0.07)_220deg,transparent_260deg)]" />
           </div>
@@ -90,6 +99,8 @@ function Artwork({ track, playing, vinyl }: { track: Track; playing: boolean; vi
       )}
       <img
         src={cover}
+        onError={onCoverError}
+        referrerPolicy="no-referrer"
         alt={`Artwork for ${albumTitleOf(track) || track.title}`}
         className={cn(
           'relative aspect-square w-full rounded-[1.6rem] object-cover shadow-[0_30px_80px_-20px_rgba(0,0,0,0.75)] transition-transform duration-700 ease-out-expo',
@@ -111,7 +122,8 @@ export function NowPlaying() {
   const vinyl = useSettings((s) => s.vinylArt);
   const karaoke = useSettings((s) => s.karaoke);
   const liked = useIsLiked(track?.id ?? '');
-  const { lyrics, kind } = useLyrics(track);
+  const lyricsInfo = useLyrics(track);
+  const { lyrics, kind } = lyricsInfo;
   const rootRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   useEnergy(open ? track : undefined, rootRef);
@@ -139,13 +151,16 @@ export function NowPlaying() {
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
         <h2 className="truncate text-2xl font-extrabold text-white sm:text-3xl">{track.title}</h2>
-        {track.source.kind === 'upload' ? (
-          <p className="truncate text-lg text-white/70">{artistNameOf(track)}</p>
-        ) : (
-          <Link to={`/artist/${track.artistId}`} onClick={() => ui.closeNowPlaying()} className="truncate text-lg text-white/70 hover:text-white hover:underline">
+        {artistHref(track) ? (
+          <Link to={artistHref(track)!} onClick={() => ui.closeNowPlaying()} className="block truncate text-lg text-white/70 hover:text-white hover:underline">
             {artistNameOf(track)}
           </Link>
+        ) : (
+          <p className="truncate text-lg text-white/70">{artistNameOf(track)}</p>
         )}
+        <div className="-ml-1 mt-1 min-h-[1.75rem]">
+          <QualityMenu track={track} />
+        </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <button
@@ -233,14 +248,14 @@ export function NowPlaying() {
 
       <div
         className={cn(
-          'relative z-10 mx-auto grid min-h-0 w-full max-w-[1500px] flex-1 gap-6 px-4 pb-4 sm:px-8 md:gap-10',
+          'relative z-10 mx-auto grid min-h-0 w-full max-w-[1500px] flex-1 grid-cols-1 gap-6 px-4 pb-4 sm:px-8 md:gap-10',
           panelOpen ? 'md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]' : 'md:grid-cols-1',
           immersiveKaraoke && 'md:grid-cols-[minmax(0,0.55fr)_minmax(0,1.45fr)]',
         )}
       >
         {/* Left / main column */}
-        <section className={cn('min-h-0 flex-col justify-center gap-6', panelOpen ? 'hidden md:flex' : 'flex', 'md:mx-auto md:w-full md:max-w-[34rem]')}>
-          <div className={cn('min-h-0', immersiveKaraoke && 'md:scale-90')}>
+        <section className={cn('no-scrollbar min-h-0 min-w-0 flex-col justify-center gap-6 overflow-y-auto', panelOpen ? 'hidden md:flex' : 'flex', 'md:mx-auto md:w-full md:max-w-[34rem]')}>
+          <div className={cn('flex min-h-[9rem] flex-1 items-center justify-center', immersiveKaraoke && 'md:scale-90')}>
             <Artwork track={track} playing={playing} vinyl={vinyl} />
           </div>
           <div className="space-y-5">
@@ -262,14 +277,14 @@ export function NowPlaying() {
         {panelOpen && (
           <section className="flex min-h-0 flex-col animate-fade-in" aria-label={showLyrics ? 'Lyrics' : 'Queue'}>
             <div className="mb-3 flex items-center gap-3 md:hidden">
-              <img src={trackCover(track)} alt="" className="h-12 w-12 rounded-lg object-cover" />
+              <img src={trackCover(track)} alt="" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.src = trackFallbackCover(track))} className="h-12 w-12 rounded-lg object-cover" />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-bold">{track.title}</p>
                 <p className="truncate text-sm text-white/70">{artistNameOf(track)}</p>
               </div>
             </div>
             {showLyrics ? (
-              <LyricsView track={track} lyrics={lyrics} source={kind} variant="immersive" className="min-h-0 flex-1" />
+              <LyricsView track={track} lyrics={lyrics} source={kind} status={lyricsInfo.status} remote={lyricsInfo.remote} onRetry={lyricsInfo.retry} variant="immersive" className="min-h-0 flex-1" />
             ) : (
               <QueuePanel tone="immersive" className="min-h-0 flex-1" />
             )}

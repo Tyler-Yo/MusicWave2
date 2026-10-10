@@ -13,6 +13,9 @@ const MixPage = lazy(() => import('@/pages/MixPage'));
 const ChartsPage = lazy(() => import('@/pages/ChartsPage'));
 const NewReleasesPage = lazy(() => import('@/pages/NewReleasesPage'));
 const LibraryPage = lazy(() => import('@/pages/LibraryPage'));
+const CollectionPage = lazy(() => import('@/pages/CollectionPage'));
+const DownloadsPage = lazy(() => import('@/pages/DownloadsPage'));
+const BrowseGenrePage = lazy(() => import('@/pages/BrowseGenrePage'));
 const LyricsStudioPage = lazy(() => import('@/pages/LyricsStudioPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
@@ -33,6 +36,9 @@ export function App() {
             <Route path="charts" element={<ChartsPage />} />
             <Route path="new-releases" element={<NewReleasesPage />} />
             <Route path="library" element={<LibraryPage />} />
+            <Route path="collection/:id" element={<CollectionPage />} />
+            <Route path="downloads" element={<DownloadsPage />} />
+            <Route path="browse/:genre" element={<BrowseGenrePage />} />
             <Route path="studio" element={<LyricsStudioPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFoundPage />} />

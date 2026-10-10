@@ -11,12 +11,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
-import { LocateFixed, Music2, PenLine } from 'lucide-react';
+import { CloudOff, LocateFixed, Music2, PenLine, RefreshCw, SearchX, Settings2 } from 'lucide-react';
+import type { LyricsStatus } from '@/hooks/useLyrics';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useLyricsSync } from '@/hooks/useLyricsSync';
 import { useIsCurrent, useSettings } from '@/hooks/usePlayer';
 import { buildTimeline } from '@/services/lrc/timing';
 import { normalize } from '@/services/search';
+import type { RemoteLyricsState } from '@/services/remoteLyrics';
 import { player } from '@/state/playerStore';
 import { lyricShift } from '@/state/settingsStore';
 import type { LyricLine as Line, LyricsSourceKind, ParsedLyrics } from '@/types/lyrics';
@@ -31,14 +33,41 @@ interface Props {
   track: Track;
   lyrics: ParsedLyrics | null;
   source: LyricsSourceKind | null;
+  /** Why there are no lyrics (online lookups); defaults to "instrumental". */
+  status?: LyricsStatus;
+  /** Details of the online lookup (e.g. why lyrics are unsynced). */
+  remote?: RemoteLyricsState;
+  onRetry?: () => void;
   variant?: LyricsVariant;
   showToolbar?: boolean;
   className?: string;
 }
 
+const EMPTY_COPY: Record<Exclude<LyricsStatus, 'ready'>, { title: string; body: string }> = {
+  loading: { title: 'Looking for lyrics…', body: 'Searching LRCLIB for this song.' },
+  instrumental: { title: 'Instrumental', body: 'No lyrics for this track — just enjoy the music.' },
+  none: { title: 'No lyrics found', body: 'Nobody has shared lyrics for this song yet. You can write and sync them yourself.' },
+  offline: { title: 'Lyrics need a connection', body: 'They load when you’re back online — downloaded songs keep their lyrics.' },
+  error: { title: 'Couldn’t load lyrics', body: 'The lyrics service didn’t answer.' },
+  disabled: { title: 'Automatic lyrics are off', body: 'Turn them on in Settings → Music sources.' },
+};
+
+/** "Lyrics from LRCLIB" credit for lyrics found online. */
+function LrclibCredit({ immersive }: { immersive: boolean }) {
+  return (
+    <p className={cn('text-[0.45em] font-semibold', immersive ? 'text-white/45' : 'text-subtle')}>
+      Lyrics from{' '}
+      <a href="https://lrclib.net" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+        LRCLIB
+      </a>
+      , shared by its community
+    </p>
+  );
+}
+
 const RESUME_AFTER_MS = 5000;
 
-export function LyricsView({ track, lyrics, source, variant = 'immersive', showToolbar = true, className }: Props) {
+export function LyricsView({ track, lyrics, source, status = 'instrumental', remote, onRetry, variant = 'immersive', showToolbar = true, className }: Props) {
   const { current } = useIsCurrent(track.id);
   const karaoke = useSettings((s) => s.karaoke);
   const scale = useSettings((s) => s.lyricsScale);
@@ -243,23 +272,43 @@ export function LyricsView({ track, lyrics, source, variant = 'immersive', showT
   const toneVars = (immersive ? { '--lyric-on': '255 255 255', '--lyric-off': '255 255 255' } : {}) as CSSProperties;
 
   if (!lyrics) {
+    const state = status === 'ready' ? 'instrumental' : status;
+    const copy = EMPTY_COPY[state];
+    const pillClass = cn('inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold', immersive ? 'bg-white/15 text-white hover:bg-white/25' : 'bg-fg/10 hover:bg-fg/15');
     return (
-      <div className={cn('flex h-full flex-col items-center justify-center gap-4 px-6 text-center', className)} style={toneVars}>
-        <div className={cn('flex h-16 items-end gap-1.5', immersive ? 'text-white' : 'text-primary')} aria-hidden="true">
-          {[0.5, 0.9, 0.6, 1, 0.7, 0.4].map((h, i) => (
-            <span key={i} className="w-2 rounded-full bg-current opacity-80 eq-bar" style={{ height: `${h * 100}%`, animationDelay: `-${i * 130}ms` }} />
-          ))}
+      <div className={cn('flex h-full flex-col items-center justify-center gap-4 px-6 text-center', className)} style={toneVars} aria-busy={state === 'loading'}>
+        <div className={cn('flex h-16 items-end gap-1.5', immersive ? 'text-white' : 'text-primary', state === 'loading' && 'opacity-60')} aria-hidden="true">
+          {state === 'none' ? (
+            <SearchX className="h-12 w-12 self-center opacity-80" />
+          ) : state === 'offline' || state === 'error' ? (
+            <CloudOff className="h-12 w-12 self-center opacity-80" />
+          ) : (
+            [0.5, 0.9, 0.6, 1, 0.7, 0.4].map((h, i) => (
+              <span key={i} className="w-2 rounded-full bg-current opacity-80 eq-bar" style={{ height: `${h * 100}%`, animationDelay: `-${i * 130}ms` }} />
+            ))
+          )}
         </div>
-        <div>
-          <p className={cn('text-2xl font-extrabold', immersive && 'text-white')}>Instrumental</p>
-          <p className={cn('mt-1 text-sm', immersive ? 'text-white/70' : 'text-muted')}>No lyrics for this track — just enjoy the music.</p>
+        <div role="status">
+          <p className={cn('text-2xl font-extrabold', immersive && 'text-white')}>{copy.title}</p>
+          <p className={cn('mt-1 max-w-sm text-sm', immersive ? 'text-white/70' : 'text-muted')}>{copy.body}</p>
         </div>
-        <Link
-          to={`/studio?track=${encodeURIComponent(track.id)}`}
-          className={cn('inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold', immersive ? 'bg-white/15 text-white hover:bg-white/25' : 'bg-fg/10 hover:bg-fg/15')}
-        >
-          <PenLine className="h-4 w-4" /> Write & sync lyrics in Studio
-        </Link>
+        <div className="flex flex-wrap justify-center gap-2">
+          {state === 'error' && onRetry && (
+            <button onClick={onRetry} className={pillClass}>
+              <RefreshCw className="h-4 w-4" /> Try again
+            </button>
+          )}
+          {state === 'disabled' && (
+            <Link to="/settings" className={pillClass}>
+              <Settings2 className="h-4 w-4" /> Settings
+            </Link>
+          )}
+          {state !== 'loading' && (
+            <Link to={`/studio?track=${encodeURIComponent(track.id)}`} className={pillClass}>
+              <PenLine className="h-4 w-4" /> Write & sync lyrics in Studio
+            </Link>
+          )}
+        </div>
       </div>
     );
   }
@@ -269,7 +318,11 @@ export function LyricsView({ track, lyrics, source, variant = 'immersive', showT
       <div className={cn('flex h-full flex-col', className)} style={toneVars}>
         <div className={cn('mx-auto mb-4 flex max-w-xl items-center gap-3 rounded-2xl px-4 py-3 text-sm', immersive ? 'bg-white/10 text-white' : 'bg-fg/[0.06]')}>
           <Music2 className="h-4 w-4 shrink-0" />
-          <span className="flex-1">These lyrics aren’t time-synced yet.</span>
+          <span className="flex-1">
+            {remote?.status === 'plain' && remote.reason === 'length-mismatch'
+              ? 'Synced lyrics exist for another version of this song, so they’re shown without timing.'
+              : 'These lyrics aren’t time-synced yet.'}
+          </span>
           <Link to={`/studio?track=${encodeURIComponent(track.id)}`} className="font-semibold text-primary">
             Sync now
           </Link>
@@ -280,6 +333,11 @@ export function LyricsView({ track, lyrics, source, variant = 'immersive', showT
               {l.text}
             </p>
           ))}
+          {source === 'lrclib' && (
+            <div className="pb-8 pt-6" style={{ fontSize }}>
+              <LrclibCredit immersive={immersive} />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -346,10 +404,15 @@ export function LyricsView({ track, lyrics, source, variant = 'immersive', showT
             )}
           </div>
           {karaoke && <span ref={ballRef} className="karaoke-ball left-0 top-0 opacity-0 transition-opacity" aria-hidden="true" />}
-          {lyrics.metadata.by && (
+          {lyrics.metadata.by && source !== 'lrclib' && (
             <p className={cn('mt-[2.5em] text-[0.45em] font-semibold', immersive ? 'text-white/45' : 'text-subtle')}>
               Lyrics: {lyrics.metadata.author ?? lyrics.metadata.artist ?? 'Unknown'} · Synced by {lyrics.metadata.by}
             </p>
+          )}
+          {source === 'lrclib' && (
+            <div className="mt-[2.5em]">
+              <LrclibCredit immersive={immersive} />
+            </div>
           )}
         </div>
       </div>

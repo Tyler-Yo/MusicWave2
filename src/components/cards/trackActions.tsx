@@ -3,6 +3,7 @@ import {
   Album as AlbumIcon,
   CheckCircle2,
   Download,
+  ExternalLink,
   Heart,
   HeartOff,
   ListEnd,
@@ -12,11 +13,12 @@ import {
   PenLine,
   Trash2,
   User,
+  XCircle,
 } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
 import type { MenuItem } from '@/components/common/Menu';
-import { downloadTrack, removeDownloadedTrack } from '@/services/audioSources';
-import { getAlbum } from '@/services/catalog';
+import { albumHref, artistHref } from '@/services/catalog';
+import { cancelDownload, downloadsStore, isDownloadable, toggleDownload } from '@/services/downloads';
 import { hasLyrics } from '@/services/lyrics';
 import { offlineStore } from '@/services/offlineStore';
 import { libraryActions, libraryStore } from '@/state/libraryStore';
@@ -24,21 +26,9 @@ import { player } from '@/state/playerStore';
 import { ui } from '@/state/uiStore';
 import type { Track } from '@/types/music';
 
-export async function toggleDownload(track: Track): Promise<void> {
-  const downloaded = Boolean(libraryStore.get().downloads[track.id]);
-  if (downloaded) {
-    await removeDownloadedTrack(track);
-    ui.toast(`Removed "${track.title}" from downloads`);
-    return;
-  }
-  ui.toast(`Downloading "${track.title}"…`);
-  try {
-    await downloadTrack(track);
-    ui.toast(`"${track.title}" is available offline`, 'success');
-  } catch (err) {
-    ui.toast(err instanceof Error ? err.message : 'Download failed', 'error');
-  }
-}
+export { toggleDownload };
+
+const SOURCE_NAME = { audius: 'Audius', archive: 'Internet Archive' } as const;
 
 export function trackMenuItems(
   track: Track,
@@ -62,9 +52,12 @@ export function trackMenuItems(
       },
     },
   ];
-  if (!isUpload && track.source.kind === 'synth') {
+  const job = downloadsStore.get().jobs[track.id];
+  if (job && job.status !== 'error') {
+    items.push({ label: 'Cancel download', icon: <XCircle />, onSelect: () => cancelDownload(track.id) });
+  } else if (isDownloadable(track)) {
     items.push({
-      label: downloaded ? 'Remove download' : 'Download for offline',
+      label: downloaded ? 'Remove download' : job?.status === 'error' ? 'Retry download' : 'Download',
       icon: downloaded ? <CheckCircle2 /> : <Download />,
       onSelect: () => void toggleDownload(track),
     });
@@ -86,11 +79,17 @@ export function trackMenuItems(
     divider: !hasLyrics(track),
     onSelect: () => navigate(`/studio?track=${encodeURIComponent(track.id)}`),
   });
-  if (!opts.hideAlbum && getAlbum(track.albumId)) {
-    items.push({ label: 'Go to album', icon: <AlbumIcon />, divider: true, onSelect: () => navigate(`/album/${track.albumId}`) });
+  const album = albumHref(track);
+  const artist = artistHref(track);
+  if (!opts.hideAlbum && album) {
+    items.push({ label: track.provider === 'archive' ? 'Go to recording' : 'Go to album', icon: <AlbumIcon />, divider: true, onSelect: () => navigate(album) });
   }
-  if (!opts.hideArtist && !isUpload) {
-    items.push({ label: 'Go to artist', icon: <User />, onSelect: () => navigate(`/artist/${track.artistId}`) });
+  if (!opts.hideArtist && artist) {
+    items.push({ label: 'Go to artist', icon: <User />, divider: !album || opts.hideAlbum, onSelect: () => navigate(artist) });
+  }
+  if (track.pageUrl && (track.provider === 'audius' || track.provider === 'archive')) {
+    const page = track.pageUrl;
+    items.push({ label: `Open on ${SOURCE_NAME[track.provider]}`, icon: <ExternalLink />, onSelect: () => window.open(page, '_blank', 'noopener,noreferrer') });
   }
   if (opts.removeFromPlaylist) {
     items.push({ label: 'Remove from this playlist', icon: <Trash2 />, danger: true, divider: true, onSelect: opts.removeFromPlaylist });

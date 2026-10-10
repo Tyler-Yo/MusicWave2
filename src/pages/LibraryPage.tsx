@@ -1,19 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Clock, CloudOff, Disc3, Download, FileAudio, FileText, Heart, ListMusic, Plus, Trash2, Upload, UserRound } from 'lucide-react';
+import { useMemo } from 'react';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Clock, Disc3, Download, FileAudio, FileText, Heart, ListMusic, Plus, Trash2, Upload, UserRound } from 'lucide-react';
 import { ArtistCard } from '@/components/cards/ArtistCard';
 import { MediaCard } from '@/components/cards/MediaCard';
+import { CollectionCard, RemoteArtistCard } from '@/components/cards/RemoteCards';
 import { TrackList } from '@/components/cards/TrackList';
 import { playCollection } from '@/components/collection/playCollection';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
-import { useLibrary, useLyricsState, useSettings } from '@/hooks/usePlayer';
-import { clearRenderCache } from '@/services/audioSources';
+import { useLibrary, useLyricsState } from '@/hooks/usePlayer';
 import { albumCover, getAlbum, getArtist, getPlaylist, getTracks, playlistCover, userPlaylistToPlaylist } from '@/services/catalog';
-import { offlineStore } from '@/services/offlineStore';
+import { useStore } from '@/state/createStore';
 import { libraryActions } from '@/state/libraryStore';
-import { settingsActions } from '@/state/settingsStore';
-import { ui } from '@/state/uiStore';
+import { getRemoteArtist, getRemoteCollection, remoteCatalogStore } from '@/state/remoteCatalog';
 import { cn } from '@/utils/cn';
 import { attachLrc, importAudioFiles } from '@/services/uploads';
 import { formatBytes, plural, relativeTime } from '@/utils/format';
@@ -28,51 +27,6 @@ const TABS = [
   { id: 'uploads', label: 'Uploads', icon: Upload },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
-
-function DownloadsTab() {
-  const downloads = useLibrary((s) => s.downloads);
-  const offline = useSettings((s) => s.offlineMode);
-  const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
-  const tracks = getTracks(Object.keys(downloads));
-  useEffect(() => {
-    void offlineStore.estimate().then(setUsage);
-  }, [downloads]);
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 rounded-2xl border border-line/60 bg-fg/[0.03] p-5 sm:flex-row sm:items-center">
-        <div className="flex-1">
-          <p className="flex items-center gap-2 font-bold">
-            <CloudOff className="h-4 w-4 text-ember" /> Offline mode
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            Simulates having no connection: only downloaded songs and your uploads can play.
-            {usage && ` Using ${formatBytes(usage.usage)} of ${formatBytes(usage.quota)} browser storage.`}
-          </p>
-        </div>
-        <label className="inline-flex cursor-pointer items-center gap-3 text-sm font-semibold">
-          <input type="checkbox" role="switch" checked={offline} onChange={(e) => settingsActions.set('offlineMode', e.target.checked)} className="peer sr-only" />
-          <span className="relative h-7 w-12 rounded-full bg-fg/20 transition peer-checked:bg-primary peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-primary after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-5" />
-          {offline ? 'On' : 'Off'}
-        </label>
-      </div>
-      {tracks.length === 0 ? (
-        <EmptyState icon={<Download className="h-7 w-7" />} title="No downloads yet">
-          Choose “Download for offline” from any song’s ⋯ menu. Downloads are rendered once and saved in your browser.
-        </EmptyState>
-      ) : (
-        <TrackList tracks={tracks} context={{ type: 'library', id: 'downloads', name: 'Downloads', href: '/library?tab=downloads' }} />
-      )}
-      <Button
-        variant="ghost"
-        size="sm"
-        icon={<Trash2 className="h-4 w-4" />}
-        onClick={() => void clearRenderCache().then(() => ui.toast('Cleared cached renders (downloads kept)', 'success'))}
-      >
-        Clear render cache
-      </Button>
-    </div>
-  );
-}
 
 function UploadsTab() {
   const uploads = useLibrary((s) => s.uploads);
@@ -135,12 +89,15 @@ export default function LibraryPage() {
   const followed = useLibrary((s) => s.followedArtists);
   const history = useLibrary((s) => s.history);
   useLibrary((s) => s.uploads);
+  useStore(remoteCatalogStore, (s) => s.version);
 
   const likedTracks = useMemo(() => getTracks(Object.entries(liked).sort((a, b) => b[1] - a[1]).map(([id]) => id)), [liked]);
   const recentTracks = useMemo(() => {
     const seen = new Set<string>();
     return getTracks(history.filter((h) => (seen.has(h.trackId) ? false : (seen.add(h.trackId), true))).map((h) => h.trackId)).slice(0, 50);
   }, [history]);
+
+  if (params.get('tab') === 'downloads') return <Navigate to="/downloads" replace />;
 
   return (
     <div>
@@ -166,7 +123,7 @@ export default function LibraryPage() {
             id={`tab-${id}`}
             aria-selected={tab === id}
             aria-controls={`panel-${id}`}
-            onClick={() => setParams({ tab: id }, { replace: true })}
+            onClick={() => (id === 'downloads' ? navigate('/downloads') : setParams({ tab: id }, { replace: true }))}
             className={cn(
               'inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-semibold transition',
               tab === id ? 'bg-fg text-bg' : 'bg-fg/[0.07] text-muted hover:bg-fg/[0.12] hover:text-fg',
@@ -192,6 +149,8 @@ export default function LibraryPage() {
                 );
               })}
               {Object.keys(savedPlaylists).map((id) => {
+                const remote = getRemoteCollection(id);
+                if (remote) return <CollectionCard key={id} collection={remote} />;
                 const p = getPlaylist(id);
                 return p ? (
                   <MediaCard key={id} href={`/playlist/${id}`} cover={playlistCover(p)} title={p.title} subtitle={`By ${p.curator}`} onPlay={() => playCollection(p.trackIds, { type: 'playlist', id, name: p.title, href: `/playlist/${id}` })} />
@@ -217,6 +176,8 @@ export default function LibraryPage() {
           ) : (
             <div role="list" className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-x-5 gap-y-8 [&>div]:w-auto">
               {Object.keys(savedAlbums).map((id) => {
+                const remote = getRemoteCollection(id);
+                if (remote) return <CollectionCard key={id} collection={remote} />;
                 const a = getAlbum(id);
                 return a ? (
                   <MediaCard key={id} href={`/album/${id}`} cover={albumCover(a)} title={a.title} subtitle={getArtist(a.artistId)?.name} onPlay={() => playCollection(a.trackIds, { type: 'album', id, name: a.title, href: `/album/${id}` })} />
@@ -233,6 +194,8 @@ export default function LibraryPage() {
           ) : (
             <div role="list" className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-5 gap-y-8 [&>div]:w-auto">
               {Object.keys(followed).map((id) => {
+                const remote = getRemoteArtist(id);
+                if (remote) return <RemoteArtistCard key={id} artist={remote} />;
                 const a = getArtist(id);
                 return a ? <ArtistCard key={id} artist={a} /> : null;
               })}
@@ -255,7 +218,6 @@ export default function LibraryPage() {
             </div>
           ))}
 
-        {tab === 'downloads' && <DownloadsTab />}
         {tab === 'uploads' && <UploadsTab />}
       </div>
     </div>

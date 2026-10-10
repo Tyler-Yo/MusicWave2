@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, Mic2, Play, Sparkles } from 'lucide-react';
+import { ArrowDownCircle, Heart, Mic2, Play, Sparkles } from 'lucide-react';
 import { ArtistCard } from '@/components/cards/ArtistCard';
 import { MediaCard } from '@/components/cards/MediaCard';
+import { OnlineGenreTile } from '@/components/cards/OnlineGenreTile';
+import { CollectionCard, RemoteShelf, RemoteTrackCard } from '@/components/cards/RemoteCards';
 import { Shelf } from '@/components/cards/Shelf';
 import { CoverImage } from '@/components/common/CoverImage';
 import { Equalizer } from '@/components/common/PlayIcon';
 import { ShelfSkeleton, Skeleton } from '@/components/common/Skeleton';
 import { useGreeting } from '@/hooks/useGreeting';
 import { useLibrary, usePlayer, useSettings } from '@/hooks/usePlayer';
+import { useRemote } from '@/hooks/useRemote';
 import { ALBUMS, ARTISTS, PLAYLISTS, PLAYLIST_MAP } from '@/data/catalog';
-import { albumCover, artistNameOf, getAlbum, getArtist, getTrack, playlistCover, trackCover } from '@/services/catalog';
+import { albumCover, artistNameOf, getArtist, getTrack, playlistCover, trackCover } from '@/services/catalog';
+import { onlineCatalog } from '@/services/onlineCatalog';
+import { AUDIUS_GENRES } from '@/services/providers/audius';
+import { useOffline } from '@/state/networkStore';
 import { madeForYou, newReleases, topCharts } from '@/services/recommendations';
 import { libraryStore } from '@/state/libraryStore';
 import { player } from '@/state/playerStore';
@@ -41,7 +47,7 @@ function useCtxPlaying(type: PlayContext['type'], id: string) {
 
 
 function AlbumCardItem({ albumId }: { albumId: string }) {
-  const album = getAlbum(albumId)!;
+  const album = ALBUMS.find((a) => a.id === albumId)!;
   const ctx: PlayContext = { type: 'album', id: album.id, name: album.title, href: `/album/${album.id}` };
   const playing = useCtxPlaying('album', album.id);
   return (
@@ -156,18 +162,32 @@ export function HomePage() {
   const charts = useMemo(() => topCharts(libraryStore.get()).slice(0, 8), [playCounts]); // eslint-disable-line react-hooks/exhaustive-deps
   const releases = useMemo(() => newReleases().slice(0, 10), []);
 
-  const recentAlbums = useMemo(() => {
+  const recent = useMemo(() => {
     const seen = new Set<string>();
-    const out: string[] = [];
+    const out: NonNullable<ReturnType<typeof getTrack>>[] = [];
     for (const h of history) {
       const t = getTrack(h.trackId);
-      if (!t || !getAlbum(t.albumId) || seen.has(t.albumId)) continue;
-      seen.add(t.albumId);
-      out.push(t.albumId);
-      if (out.length >= 10) break;
+      if (!t || seen.has(t.id)) continue;
+      seen.add(t.id);
+      out.push(t);
+      if (out.length >= 12) break;
     }
     return out;
   }, [history]);
+  const downloadCount = useLibrary((s) => Object.keys(s.downloads).length);
+  const sources = useSettings((s) => s.sources);
+  const { offline } = useOffline();
+
+  const trending = useRemote(sources.audius ? 'home:trending' : null, (signal) => onlineCatalog.trending({ limit: 24, signal }));
+  const hiRes = useRemote(sources.archive ? 'home:hires' : null, (signal) => onlineCatalog.hiResConcerts({ limit: 16, signal }));
+  const playlists = useRemote(sources.audius ? 'home:playlists' : null, (signal) => onlineCatalog.trendingPlaylists({ limit: 16, signal }));
+  const underground = useRemote(sources.audius ? 'home:underground' : null, (signal) => onlineCatalog.underground({ limit: 20, signal }));
+  const lossless = useRemote(sources.archive ? 'home:lossless' : null, (signal) => onlineCatalog.losslessConcerts({ limit: 16, signal }));
+  const classics = useRemote(sources.archive ? 'home:78s' : null, (signal) => onlineCatalog.classic78s({ limit: 16, signal }));
+  const netlabels = useRemote(sources.archive ? 'home:netlabels' : null, (signal) => onlineCatalog.netlabels({ limit: 16, signal }));
+  const trendingCtx: PlayContext = { type: 'chart', id: 'audius-trending', name: 'Trending now', href: '/' };
+  const undergroundCtx: PlayContext = { type: 'chart', id: 'audius-underground', name: 'Underground trending', href: '/' };
+  const recentCtx: PlayContext = { type: 'library', id: 'recent', name: 'Recently played', href: '/library?tab=recent' };
 
   const quick = [
     ...mixes.slice(0, 3).map((m) => ({ to: `/mix/${m.id}`, cover: m.cover, title: m.title, ids: m.trackIds, ctx: { type: 'mix' as const, id: m.id, name: m.title, href: `/mix/${m.id}` } })),
@@ -181,13 +201,14 @@ export function HomePage() {
           {greeting}
           {name ? `, ${name}` : ''}
         </h1>
-        <p className="mt-1 text-muted">Fresh picks, synced lyrics and everything you love — all in one wave.</p>
+        <p className="mt-1 text-muted">Millions of free tracks, lossless live recordings and lyrics that follow along.</p>
         <div className="mt-6 grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-3">
           {!ready
             ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)
             : [
                 <QuickTile key="liked" to="/library?tab=songs" title={`Liked Songs${likedCount ? ` · ${likedCount}` : ''}`} icon={<Heart className="h-6 w-6" fill="currentColor" />} />,
-                ...quick.map((q) => (
+                <QuickTile key="downloads" to="/downloads" title={`Downloads${downloadCount ? ` · ${downloadCount}` : ''}`} icon={<ArrowDownCircle className="h-6 w-6" />} />,
+                ...quick.slice(0, 4).map((q) => (
                   <QuickTile
                     key={q.to}
                     to={q.to}
@@ -200,6 +221,101 @@ export function HomePage() {
               ]}
         </div>
       </section>
+
+      {recent.length > 0 && (
+        <Shelf title="Recently Played" seeAllHref="/library?tab=recent">
+          {recent.map((t, i) => (
+            <RemoteTrackCard key={t.id} track={t} list={recent} index={i} context={recentCtx} />
+          ))}
+        </Shelf>
+      )}
+
+      {sources.audius && (
+        <RemoteShelf
+          title="Trending Now"
+          subtitle="The most played songs on Audius this week — full tracks, free"
+          result={trending}
+          render={(items) => items.map((t, i) => <RemoteTrackCard key={t.id} track={t} list={items} index={i} context={trendingCtx} />)}
+        />
+      )}
+
+      {sources.archive && (
+        <RemoteShelf
+          title="Hi-Res & Lossless Live"
+          subtitle="24-bit FLAC concert recordings from the Live Music Archive"
+          result={hiRes}
+          hideWhenOffline
+          render={(items) => items.map((c) => <CollectionCard key={c.id} collection={c} />)}
+        />
+      )}
+
+      {sources.audius && (
+        <RemoteShelf
+          title="Popular Playlists"
+          result={playlists}
+          hideWhenOffline
+          render={(items) => items.map((c) => <CollectionCard key={c.id} collection={c} />)}
+        />
+      )}
+
+      {sources.audius && !offline && (
+        <section aria-labelledby="genres-title">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <h2 id="genres-title" className="text-xl font-extrabold tracking-tight sm:text-2xl">
+              Browse by Genre
+            </h2>
+            <Link to="/search" className="rounded-full px-3 py-1.5 text-sm font-semibold text-muted hover:bg-fg/5 hover:text-fg">
+              See all
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
+            {AUDIUS_GENRES.slice(0, 8).map((g) => (
+              <OnlineGenreTile key={g} genre={g} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {sources.audius && (
+        <RemoteShelf
+          title="Underground Trending"
+          subtitle="Fresh tracks from up-and-coming artists"
+          result={underground}
+          hideWhenOffline
+          render={(items) => items.map((t, i) => <RemoteTrackCard key={t.id} track={t} list={items} index={i} context={undergroundCtx} />)}
+        />
+      )}
+
+      {sources.archive && (
+        <>
+          <RemoteShelf
+            title="Lossless Concerts"
+            subtitle="FLAC soundboard and audience recordings, shared with the artists’ blessing"
+            result={lossless}
+            hideWhenOffline
+            render={(items) => items.map((c) => <CollectionCard key={c.id} collection={c} />)}
+          />
+          <RemoteShelf
+            title="Golden Age 78s"
+            subtitle="Digitized 78 rpm records from the Great 78 Project"
+            result={classics}
+            hideWhenOffline
+            render={(items) => items.map((c) => <CollectionCard key={c.id} collection={c} />)}
+          />
+          <RemoteShelf
+            title="Netlabel Releases"
+            subtitle="Creative Commons albums from independent netlabels"
+            result={netlabels}
+            hideWhenOffline
+            render={(items) => items.map((c) => <CollectionCard key={c.id} collection={c} />)}
+          />
+        </>
+      )}
+
+      <div className="pt-4">
+        <h2 className="text-2xl font-black tracking-tight sm:text-3xl">MusicWave Originals</h2>
+        <p className="mt-1 text-sm text-muted">Demo songs composed in your browser, with hand-timed word-by-word lyrics.</p>
+      </div>
 
       <LyricsSpotlight />
 
@@ -215,14 +331,6 @@ export function HomePage() {
               <MixCard key={m.id} mix={m} />
             ))}
           </Shelf>
-
-          {recentAlbums.length > 0 && (
-            <Shelf title="Recently Played" seeAllHref="/library?tab=recent">
-              {recentAlbums.map((id) => (
-                <AlbumCardItem key={id} albumId={id} />
-              ))}
-            </Shelf>
-          )}
 
           <Shelf title="New Releases" subtitle="The latest from MusicWave artists" seeAllHref="/new-releases">
             {releases.map((a) => (

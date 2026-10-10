@@ -1,15 +1,21 @@
 /** A single track in a list: number / equalizer, artwork, title, artist, album, duration, like, menu. */
 import { memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CloudOff, Download, Heart, Mic2, MoreHorizontal } from 'lucide-react';
+import { CloudOff, Heart, Mic2, MoreHorizontal } from 'lucide-react';
 import { CoverImage } from '@/components/common/CoverImage';
+import { DownloadIndicator } from '@/components/common/DownloadIndicator';
 import { Menu } from '@/components/common/Menu';
 import { Equalizer, PlayPauseGlyph } from '@/components/common/PlayIcon';
-import { useIsCurrent, useIsLiked, useLibrary, useLyricsState, useSettings } from '@/hooks/usePlayer';
+import { QualityBadge } from '@/components/common/QualityBadge';
+import { useIsCurrent, useIsLiked, useLibrary, useLyricsState } from '@/hooks/usePlayer';
 import { isPlayableOffline } from '@/services/audioSources';
-import { albumTitleOf, artistNameOf, getAlbum, trackCover } from '@/services/catalog';
+import { albumHref, albumTitleOf, artistNameOf, trackCover, trackFallbackCover } from '@/services/catalog';
 import { hasLyrics } from '@/services/lyrics';
+import { bestTier } from '@/services/quality';
+import { remoteLyricsStore } from '@/services/remoteLyrics';
+import { useStore } from '@/state/createStore';
 import { libraryActions } from '@/state/libraryStore';
+import { useOffline } from '@/state/networkStore';
 import type { Track } from '@/types/music';
 import { cn } from '@/utils/cn';
 import { formatTime } from '@/utils/format';
@@ -41,12 +47,15 @@ export const TrackRow = memo(function TrackRow({
   const navigate = useNavigate();
   const { current, playing } = useIsCurrent(track.id);
   const liked = useIsLiked(track.id);
-  const downloaded = useLibrary((s) => Boolean(s.downloads[track.id]));
-  const offline = useSettings((s) => s.offlineMode);
+  const download = useLibrary((s) => s.downloads[track.id]);
+  const { offline } = useOffline();
   const overrides = useLyricsState((s) => s.overrides);
+  useStore(remoteLyricsStore, (s) => s.byTrack[track.id]);
   const unavailable = offline && !isPlayableOffline(track);
   const lyrics = hasLyrics(track, overrides);
-  const album = getAlbum(track.albumId);
+  const albumLink = albumHref(track);
+  // Downloaded copies are labelled with what was saved; otherwise the best the source offers.
+  const tier = download?.tier ?? (track.source.kind === 'remote' ? bestTier(track.source.variants) : undefined);
 
   return (
     <div
@@ -73,23 +82,28 @@ export const TrackRow = memo(function TrackRow({
       </div>
 
       <button onClick={onPlay} disabled={unavailable} className="flex min-w-0 items-center gap-3 rounded-lg text-left" tabIndex={-1} aria-hidden="true">
-        {showCover && <CoverImage src={trackCover(track)} alt="" rounded="rounded-md" className="h-11 w-11 shrink-0" />}
+        {showCover && <CoverImage src={trackCover(track)} fallback={trackFallbackCover(track)} alt="" rounded="rounded-md" className="h-11 w-11 shrink-0" />}
         <span className="min-w-0">
           <span className={cn('flex items-center gap-1.5 truncate text-[15px] font-semibold', current && 'text-primary')}>
             <span className="truncate">{track.title}</span>
-            {lyrics && <Mic2 className="h-3.5 w-3.5 shrink-0 text-subtle" aria-label="Has synchronized lyrics" />}
-            {downloaded && <Download className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Downloaded" />}
+            {lyrics && <Mic2 className="h-3.5 w-3.5 shrink-0 text-subtle" aria-label="Has lyrics" />}
+            <DownloadIndicator trackId={track.id} downloaded={Boolean(download)} />
             {unavailable && <CloudOff className="h-3.5 w-3.5 shrink-0" aria-label="Not available offline" />}
           </span>
-          {showArtist && <span className="block truncate text-[13px] text-muted">{artistNameOf(track)}</span>}
+          {showArtist && (
+            <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted">
+              {tier && <QualityBadge tier={tier} />}
+              <span className="truncate">{artistNameOf(track)}</span>
+            </span>
+          )}
         </span>
       </button>
 
       {showAlbum && (
         <div className="hidden min-w-0 truncate text-[13px] text-muted md:block">
-          {album ? (
-            <Link to={`/album/${album.id}`} className="hover:text-fg hover:underline">
-              {album.title}
+          {albumLink ? (
+            <Link to={albumLink} className="hover:text-fg hover:underline">
+              {albumTitleOf(track)}
             </Link>
           ) : (
             albumTitleOf(track)

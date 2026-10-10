@@ -4,16 +4,17 @@ import { ChevronUp, Heart, ListMusic, Mic2, SkipForward } from 'lucide-react';
 import { IconButton } from '@/components/common/Button';
 import { CoverImage } from '@/components/common/CoverImage';
 import { MiniLyrics } from '@/components/lyrics/MiniLyrics';
-import { useCurrentTrack, useIsLiked, useLyricsState, useSettings, useUI } from '@/hooks/usePlayer';
+import { useLyrics } from '@/hooks/useLyrics';
+import { useCurrentTrack, useIsLiked, useSettings, useUI } from '@/hooks/usePlayer';
 import { usePlaybackTime } from '@/hooks/usePlaybackTime';
-import { hasLyrics } from '@/services/lyrics';
-import { artistNameOf, trackCover } from '@/services/catalog';
+import { artistHref, artistNameOf, trackCover, trackFallbackCover } from '@/services/catalog';
 import { libraryActions } from '@/state/libraryStore';
 import { isCurrentLoaded, pendingPosition, player } from '@/state/playerStore';
 import { ui } from '@/state/uiStore';
 import type { Track } from '@/types/music';
 import { cn } from '@/utils/cn';
 import { PlayButton, TransportControls } from './Controls';
+import { QualityMenu } from './QualityMenu';
 import { SeekBar } from './SeekBar';
 import { SpeedMenu } from './SpeedMenu';
 import { VolumeControl } from './VolumeControl';
@@ -34,10 +35,13 @@ export function PlayerBar() {
   const liked = useIsLiked(track?.id ?? '');
   const miniLyrics = useSettings((s) => s.miniLyrics);
   const queueOpen = useUI((s) => s.queueDrawerOpen);
-  const overrides = useLyricsState((s) => s.overrides);
+  // Also starts the automatic lyrics lookup for online tracks as soon as they play.
+  const { lyrics: parsed, status } = useLyrics(track);
 
   if (!track) return null;
-  const lyrics = hasLyrics(track, overrides);
+  const lyrics = Boolean(parsed);
+  const lyricsButton = lyrics || (track.source.kind === 'remote' && status !== 'instrumental');
+  const artistLink = artistHref(track);
 
   return (
     <section
@@ -47,13 +51,13 @@ export function PlayerBar() {
       {/* Mobile */}
       <div className="relative flex items-center gap-3 p-2 md:hidden">
         <button onClick={() => ui.openNowPlaying(null)} className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-label={`Open player: ${track.title} by ${artistNameOf(track)}`}>
-          <CoverImage src={trackCover(track)} alt="" rounded="rounded-lg" className="h-11 w-11 shrink-0" />
+          <CoverImage src={trackCover(track)} fallback={trackFallbackCover(track)} alt="" rounded="rounded-lg" className="h-11 w-11 shrink-0" />
           <span className="min-w-0">
             <span className="block truncate text-sm font-bold">{track.title}</span>
             <span className="block truncate text-xs text-muted">{artistNameOf(track)}</span>
           </span>
         </button>
-        {lyrics && (
+        {lyricsButton && (
           <IconButton label="Lyrics" size="sm" onClick={() => ui.openNowPlaying('lyrics')}>
             <Mic2 className="h-4 w-4" />
           </IconButton>
@@ -69,7 +73,7 @@ export function PlayerBar() {
       <div className="hidden h-[5.5rem] grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)] items-center gap-4 px-4 md:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 items-center gap-3">
           <button onClick={() => ui.openNowPlaying()} className="group relative shrink-0 rounded-lg" aria-label="Expand player">
-            <CoverImage src={trackCover(track)} alt="" rounded="rounded-lg" className="h-14 w-14 shadow-card" />
+            <CoverImage src={trackCover(track)} fallback={trackFallbackCover(track)} alt="" rounded="rounded-lg" className="h-14 w-14 shadow-card" />
             <span className="absolute inset-0 grid place-items-center rounded-lg bg-black/50 opacity-0 transition group-hover:opacity-100">
               <ChevronUp className="h-5 w-5 text-white" />
             </span>
@@ -78,12 +82,12 @@ export function PlayerBar() {
             <button onClick={() => ui.openNowPlaying()} className="block max-w-full truncate text-left text-sm font-bold hover:underline">
               {track.title}
             </button>
-            {track.source.kind === 'upload' ? (
-              <span className="block truncate text-xs text-muted">{artistNameOf(track)}</span>
-            ) : (
-              <Link to={`/artist/${track.artistId}`} className="block truncate text-xs text-muted hover:text-fg hover:underline">
+            {artistLink ? (
+              <Link to={artistLink} className="block truncate text-xs text-muted hover:text-fg hover:underline">
                 {artistNameOf(track)}
               </Link>
+            ) : (
+              <span className="block truncate text-xs text-muted">{artistNameOf(track)}</span>
             )}
           </div>
           <IconButton label={liked ? 'Remove from Liked Songs' : 'Add to Liked Songs'} aria-pressed={liked} size="sm" onClick={() => libraryActions.toggleLike(track.id)} className={liked ? '!text-ember' : ''}>
@@ -99,8 +103,11 @@ export function PlayerBar() {
         <div className="hidden min-w-0 justify-center xl:flex">{miniLyrics && lyrics && <MiniLyrics track={track} />}</div>
 
         <div className="flex items-center justify-end gap-1">
+          <span className="hidden lg:inline-flex">
+            <QualityMenu track={track} tone="default" compact />
+          </span>
           <SpeedMenu />
-          <IconButton label="Lyrics" active={false} onClick={() => ui.openNowPlaying('lyrics')} disabled={!lyrics} size="sm">
+          <IconButton label="Lyrics" active={false} onClick={() => ui.openNowPlaying('lyrics')} disabled={!lyricsButton} size="sm">
             <Mic2 className="h-[18px] w-[18px]" />
           </IconButton>
           <IconButton label="Queue" aria-pressed={queueOpen} active={queueOpen} onClick={() => ui.toggleQueueDrawer()} size="sm">
